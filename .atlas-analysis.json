@@ -1,0 +1,110 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "WhatsApp Auto-Transcriber",
+  "projectDescription": "Automatically transcribe WhatsApp voice notes to your clipboard using OpenAI Whisper, running locally with hardware acceleration.",
+  "theme": "palm",
+  "primaryColor": "#25D366",
+  "lightColor": "#128C7E",
+  "darkColor": "#075E54",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "prerequisites",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "CLI Reference",
+            "pages": [
+              "cli/overview",
+              "cli/transcriber",
+              "cli/health",
+              "cli/config",
+              "cli/setup",
+              "cli/reset",
+              "cli/logs"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/overview",
+              "configuration/models",
+              "configuration/hardware",
+              "configuration/advanced"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/macos",
+              "guides/windows",
+              "guides/optimization",
+              "guides/workflows"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "pages": [
+              "troubleshooting/common-issues",
+              "troubleshooting/performance",
+              "troubleshooting/whatsapp-path"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Modules",
+            "pages": [
+              "api/core",
+              "api/transcriber",
+              "api/config",
+              "api/health"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utils",
+              "api/monitor",
+              "api/db",
+              "api/maintenance"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Hardware-accelerated transcription (CUDA, Metal Performance Shaders)",
+    "Real-time file system monitoring with Watchdog",
+    "Interactive setup wizard with system diagnostics",
+    "Automatic model cleanup and memory optimization",
+    "Startup backfill for missed voice notes",
+    "Cross-platform support (macOS and Windows)"
+  ],
+  "publicApiSurface": [
+    "wa-transcriber (main command)",
+    "wa-transcriber health",
+    "wa-transcriber config",
+    "wa-transcriber setup",
+    "wa-transcriber reset",
+    "wa-transcriber logs audio",
+    "wa-transcriber logs app",
+    "TranscriptionWorker",
+    "InternalAudioHandler",
+    "run_diagnostics()",
+    "suggest_model()",
+    "queue_recent_files()"
+  ]
+}
