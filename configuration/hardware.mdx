@@ -1,0 +1,400 @@
+---
+title: Hardware Acceleration Settings
+description: Configuring GPU, Apple Silicon, and memory limits for optimal performance
+---
+
+WhatsApp Auto-Transcriber supports multiple hardware acceleration backends to maximize transcription speed. Proper configuration ensures you get the best performance without running into memory issues.
+
+## Supported Acceleration Backends
+
+The application automatically detects and uses the best available acceleration:
+
+1. **CUDA** (NVIDIA GPUs) - Highest priority
+2. **MPS** (Apple Silicon) - Second priority
+3. **CPU** (Fallback) - Used when no GPU is available
+
+## Hardware Detection
+
+To check which acceleration backend is active:
+
+```bash
+wa-transcriber health
+```
+
+Example output:
+
+```
+--- Hardware Check ---
+ 🚀 Accelerator          Active (NVIDIA GeForce RTX 3060)
+```
+
+or
+
+```
+--- Hardware Check ---
+ 🚀 Accelerator          Active (Apple M2 Pro)
+```
+
+or
+
+```
+--- Hardware Check ---
+ ⚠️  Accelerator          None (Running on CPU - expects slower performance)
+```
+
+## NVIDIA GPU (CUDA) Configuration
+
+### Requirements
+- NVIDIA GPU with CUDA support (GTX 10-series or newer recommended)
+- CUDA-compatible PyTorch installation
+- Sufficient VRAM for your chosen model
+
+### VRAM Limit Configuration
+
+<ParamField path="NVIDIA_VRAM_LIMIT_FACTOR" type="float" default="0.7">
+  Percentage of VRAM to allocate for transcription (0.0-1.0).
+  
+  **Default:** `0.7` (70% of total VRAM)
+  
+  The application reserves 2GB for display and OS overhead, then applies this factor.
+</ParamField>
+
+#### Calculation Example
+
+For an 8GB RTX 3060:
+
+```
+Total VRAM:        8.0 GB
+OS Overhead:      -2.0 GB
+Available:         6.0 GB
+Limit Factor:      × 0.7
+─────────────────────────
+Usable:            4.2 GB  → Recommended model: medium
+```
+
+### Adjusting VRAM Limits
+
+If you experience out-of-memory errors or want to be more conservative:
+
+```json
+{
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.5
+}
+```
+
+For aggressive utilization (may cause instability):
+
+```json
+{
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.85
+}
+```
+
+<Warning>
+  Setting `NVIDIA_VRAM_LIMIT_FACTOR` above 0.8 may cause crashes if other GPU applications are running.
+</Warning>
+
+### Multi-GPU Systems
+
+The application automatically uses the first available CUDA device (GPU 0). Multi-GPU selection is not currently supported.
+
+## Apple Silicon (MPS) Configuration
+
+### Requirements
+- M1, M2, M3, or M4 chip
+- macOS 12.3 or later
+- MPS-compatible PyTorch installation
+
+### Unified Memory Configuration
+
+Apple Silicon uses unified memory shared between CPU and GPU. The application limits RAM usage to prevent system slowdown:
+
+<ParamField path="SYSTEM_MEMORY_LIMIT_FACTOR" type="float" default="0.5">
+  Percentage of system RAM to allocate for transcription (0.0-1.0).
+  
+  **Default:** `0.5` (50% of total RAM)
+  
+  This ensures the system remains responsive during transcription.
+</ParamField>
+
+#### Calculation Example
+
+For a 16GB M2 MacBook Pro:
+
+```
+Total RAM:         16.0 GB
+Limit Factor:       × 0.5
+─────────────────────────
+Usable:             8.0 GB  → Recommended model: turbo
+```
+
+### Half-Precision (FP16) Mode
+
+<ParamField path="ENABLE_MPS_FP16" type="boolean" default="false">
+  Enable half-precision floating-point on Apple Silicon.
+  
+  **Benefits:**
+  - Faster transcription (up to 30% speed improvement)
+  - Lower memory usage
+  
+  **Drawbacks:**
+  - Slightly reduced accuracy
+  - May cause numerical instability on some models
+  
+  **Recommendation:** Enable for `turbo` and `large-v3` on M2/M3/M4 chips.
+</ParamField>
+
+To enable FP16:
+
+```json
+{
+  "ENABLE_MPS_FP16": true
+}
+```
+
+<Tip>
+  FP16 is most effective on M2 and newer chips. M1 users may see minimal improvement.
+</Tip>
+
+### Memory Pressure Management
+
+If you experience system slowdown during transcription:
+
+1. **Lower the memory limit:**
+   ```json
+   {
+     "SYSTEM_MEMORY_LIMIT_FACTOR": 0.4
+   }
+   ```
+
+2. **Use a smaller model:**
+   ```json
+   {
+     "MODEL_SIZE": "small"
+   }
+   ```
+
+3. **Disable FP16 if enabled:**
+   ```json
+   {
+     "ENABLE_MPS_FP16": false
+   }
+   ```
+
+## CPU Fallback Configuration
+
+When no GPU acceleration is available, the application runs on CPU.
+
+### Performance Expectations
+
+| Model | Typical Speed (30s audio) |
+| --- | --- |
+| `tiny` | ~10 seconds |
+| `base` | ~20 seconds |
+| `small` | ~45 seconds |
+| `medium` | ~2 minutes |
+| `turbo` | ~3 minutes |
+| `large-v3` | ~5+ minutes |
+
+### CPU Memory Configuration
+
+CPU mode also uses `SYSTEM_MEMORY_LIMIT_FACTOR`:
+
+```json
+{
+  "SYSTEM_MEMORY_LIMIT_FACTOR": 0.5
+}
+```
+
+<Warning>
+  CPU transcription is significantly slower. For better performance, consider:
+  - Using `tiny` or `base` models
+  - Upgrading hardware to include a GPU
+</Warning>
+
+## Memory Limit Factor Guidelines
+
+### Conservative (Recommended for stability)
+
+```json
+{
+  "SYSTEM_MEMORY_LIMIT_FACTOR": 0.4,
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.6
+}
+```
+
+**Use when:**
+- Running other memory-intensive applications
+- System has limited RAM/VRAM
+- Prioritizing system stability
+
+### Balanced (Default)
+
+```json
+{
+  "SYSTEM_MEMORY_LIMIT_FACTOR": 0.5,
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.7
+}
+```
+
+**Use when:**
+- Dedicating machine primarily to transcription
+- Running alongside lightweight applications
+
+### Aggressive (Advanced users)
+
+```json
+{
+  "SYSTEM_MEMORY_LIMIT_FACTOR": 0.7,
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.85
+}
+```
+
+**Use when:**
+- Machine is dedicated to transcription
+- You need to run the largest possible model
+- You're willing to risk occasional crashes
+
+<Warning>
+  Aggressive settings may cause out-of-memory errors. Always test with `wa-transcriber health` first.
+</Warning>
+
+## Platform-Specific Recommendations
+
+### macOS (Apple Silicon)
+
+**Recommended Configuration:**
+
+```json
+{
+  "MODEL_SIZE": "turbo",
+  "SYSTEM_MEMORY_LIMIT_FACTOR": 0.5,
+  "ENABLE_MPS_FP16": true
+}
+```
+
+**For M1 Base (8GB):**
+```json
+{
+  "MODEL_SIZE": "small",
+  "SYSTEM_MEMORY_LIMIT_FACTOR": 0.4,
+  "ENABLE_MPS_FP16": false
+}
+```
+
+**For M3/M4 Pro (18GB+):**
+```json
+{
+  "MODEL_SIZE": "large-v3",
+  "SYSTEM_MEMORY_LIMIT_FACTOR": 0.6,
+  "ENABLE_MPS_FP16": true
+}
+```
+
+### Windows (NVIDIA GPU)
+
+**Recommended Configuration:**
+
+```json
+{
+  "MODEL_SIZE": "turbo",
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.7
+}
+```
+
+**For RTX 3050/3060 (6-8GB VRAM):**
+```json
+{
+  "MODEL_SIZE": "medium",
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.65
+}
+```
+
+**For RTX 4070+ (12GB+ VRAM):**
+```json
+{
+  "MODEL_SIZE": "large-v3",
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.75
+}
+```
+
+### Windows/Linux (No GPU)
+
+**Recommended Configuration:**
+
+```json
+{
+  "MODEL_SIZE": "tiny",
+  "SYSTEM_MEMORY_LIMIT_FACTOR": 0.5
+}
+```
+
+<Tip>
+  If you have 16GB+ RAM and patience, you can use `small` or `base` models on CPU.
+</Tip>
+
+## Troubleshooting
+
+### Out of Memory Errors
+
+**CUDA Out of Memory:**
+```
+RuntimeError: CUDA out of memory. Tried to allocate X GB
+```
+
+**Solutions:**
+1. Lower `NVIDIA_VRAM_LIMIT_FACTOR` to 0.6 or 0.5
+2. Switch to a smaller model
+3. Close other GPU applications (browsers, games, etc.)
+4. Run `wa-transcriber health` to get recommendations
+
+**MPS Out of Memory:**
+```
+RuntimeError: MPS backend out of memory
+```
+
+**Solutions:**
+1. Lower `SYSTEM_MEMORY_LIMIT_FACTOR` to 0.4
+2. Switch to a smaller model
+3. Disable FP16: `"ENABLE_MPS_FP16": false`
+4. Close other applications
+
+### No GPU Detected
+
+If GPU is not being used:
+
+1. **NVIDIA:** Verify CUDA installation
+   ```bash
+   nvidia-smi
+   ```
+
+2. **Apple Silicon:** Verify macOS version
+   ```bash
+   sw_vers
+   ```
+   (Requires macOS 12.3+)
+
+3. **Check PyTorch:**
+   ```bash
+   python -c "import torch; print(torch.cuda.is_available())"
+   python -c "import torch; print(torch.backends.mps.is_available())"
+   ```
+
+### Slow Performance Despite GPU
+
+1. Verify GPU is actually being used: `wa-transcriber health`
+2. Check if other applications are using GPU resources
+3. For Apple Silicon: Try enabling FP16
+4. Ensure model size is appropriate for available memory
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Model Selection" icon="brain" href="/configuration/models">
+    Choose the right model for your hardware
+  </Card>
+  
+  <Card title="Advanced Options" icon="sliders" href="/configuration/advanced">
+    Configure additional settings and optimizations
+  </Card>
+</CardGroup>

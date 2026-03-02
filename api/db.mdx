@@ -1,0 +1,420 @@
+---
+title: "db.py"
+description: "SQLite database operations for tracking processed audio files"
+icon: "database"
+---
+
+The `db.py` module manages SQLite database operations for tracking which audio files have already been transcribed, preventing duplicate processing.
+
+## Overview
+
+This module provides a persistent, thread-safe database layer using SQLite to maintain a history of processed audio files. It replaces the legacy log-based tracking system with a proper relational database.
+
+**Key Features:**
+- SQLite database with Write-Ahead Logging (WAL) for concurrency
+- Indexed queries for fast lookups
+- Automatic migration from legacy log files
+- Secure file permissions (POSIX systems)
+- Context manager for safe connection handling
+- UTC timestamp tracking
+
+## Database Schema
+
+### Table: `processed_files`
+
+```sql
+CREATE TABLE IF NOT EXISTS processed_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename TEXT UNIQUE NOT NULL,
+    filepath TEXT,
+    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_filename ON processed_files(filename);
+```
+
+**Columns:**
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Unique record identifier |
+| `filename` | TEXT | UNIQUE NOT NULL | Audio filename (e.g., "PTT-20260302-WA0001.opus") |
+| `filepath` | TEXT | nullable | Full path to the file (or "migrated_from_log") |
+| `processed_at` | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | UTC timestamp when file was processed |
+
+**Indexes:**
+- `idx_filename`: Index on `filename` column for O(log n) lookup performance
+
+---
+
+## Database Location
+
+The database file is stored at:
+
+```
+~/.wa-transcriber/history.db
+```
+
+Additional WAL files may be present:
+- `history.db-wal` (Write-Ahead Log)
+- `history.db-shm` (Shared Memory)
+
+These files are managed automatically by SQLite.
+
+---
+
+## Functions
+
+### get_db_connection
+
+```python
+@contextmanager
+def get_db_connection() -> Generator[sqlite3.Connection, None, None]
+```
+
+Context manager for database connections. Ensures connections are properly closed and enables row access by column name.
+
+<ResponseField name="yields" type="sqlite3.Connection">
+  SQLite database connection with `row_factory` set to `sqlite3.Row`
+</ResponseField>
+
+**Example:**
+
+```python
+from app.db import get_db_connection
+
+with get_db_connection() as conn:
+    cursor = conn.execute("SELECT * FROM processed_files LIMIT 1")
+    row = cursor.fetchone()
+    
+    if row:
+        # Access columns by name
+        print(f"Filename: {row['filename']}")
+        print(f"Processed at: {row['processed_at']}")
+# Connection is automatically closed here
+```
+
+**Features:**
+- Automatically closes the connection when the context exits
+- Sets `row_factory = sqlite3.Row` to enable column access by name: `row['filename']`
+- Ensures proper cleanup even if an exception occurs
+
+---
+
+### init_db
+
+```python
+def init_db() -> None
+```
+
+Initializes the database table and enables WAL mode for concurrency.
+
+This function should be called once at application startup.
+
+**Example:**
+
+```python
+from app.db import init_db
+
+try:
+    init_db()
+    print("Database initialized successfully")
+except Exception as e:
+    print(f"Failed to initialize database: {e}")
+```
+
+**Behavior:**
+
+1. **Directory Creation**: Creates `~/.wa-transcriber/` directory if it doesn't exist
+2. **WAL Mode**: Enables Write-Ahead Logging for better concurrency:
+   ```sql
+   PRAGMA journal_mode=WAL;
+   ```
+3. **Table Creation**: Creates `processed_files` table if it doesn't exist
+4. **Index Creation**: Creates index on `filename` column for fast lookups
+5. **Security**: Sets file permissions to `0o600` (owner read/write only) on POSIX systems
+
+**Error Handling:**
+- Raises `sqlite3.Error` if database initialization fails
+- Prints warning if file permissions cannot be set (non-fatal)
+
+---
+
+### is_file_processed
+
+```python
+def is_file_processed(filename: str) -> bool
+```
+
+Checks if a file has already been processed.
+
+<ParamField path="filename" type="str" required>
+  The audio filename to check (e.g., "PTT-20260302-WA0001.opus")
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  `True` if the file has been processed, `False` otherwise
+</ResponseField>
+
+**Example:**
+
+```python
+from app.db import is_file_processed
+
+filename = "PTT-20260302-WA0001.opus"
+
+if is_file_processed(filename):
+    print(f"Skipping {filename} - already transcribed")
+else:
+    print(f"Processing {filename}...")
+    # Transcribe the file
+```
+
+**Performance:**
+- Uses indexed lookup: `O(log n)` time complexity
+- Query: `SELECT 1 FROM processed_files WHERE filename = ?`
+- Returns immediately after finding the first match
+
+**Error Handling:**
+- Returns `False` if a database error occurs (logs error to console)
+- This conservative approach ensures files are not skipped due to database issues
+
+---
+
+### add_processed_file
+
+```python
+def add_processed_file(filename: str, filepath: str) -> None
+```
+
+Marks a file as processed in the database.
+
+<ParamField path="filename" type="str" required>
+  The audio filename (e.g., "PTT-20260302-WA0001.opus")
+</ParamField>
+
+<ParamField path="filepath" type="str" required>
+  The full path to the audio file
+</ParamField>
+
+**Example:**
+
+```python
+from app.db import add_processed_file
+
+filename = "PTT-20260302-WA0001.opus"
+filepath = "/Users/john/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media/PTT-20260302-WA0001.opus"
+
+# After successful transcription
+add_processed_file(filename, filepath)
+print(f"Marked {filename} as processed")
+```
+
+**Behavior:**
+- Uses `INSERT OR IGNORE` to prevent duplicate key errors
+- Stores current UTC timestamp in `processed_at` column
+- Commits the transaction automatically
+
+**Error Handling:**
+- Prints error message if database operation fails
+- Does not raise exceptions (non-fatal error)
+- If insert fails, file may be processed again on next run
+
+**SQL Query:**
+```sql
+INSERT OR IGNORE INTO processed_files (filename, filepath, processed_at)
+VALUES (?, ?, ?)
+```
+
+---
+
+### get_all_processed_filenames
+
+```python
+def get_all_processed_filenames() -> Set[str]
+```
+
+Returns a set of all processed filenames.
+
+<Warning>
+  Usage of this function is discouraged for large datasets as it loads all filenames into memory.
+  Prefer `is_file_processed()` for individual lookups.
+</Warning>
+
+<ResponseField name="return" type="Set[str]">
+  Set of all filenames in the `processed_files` table
+</ResponseField>
+
+**Example:**
+
+```python
+from app.db import get_all_processed_filenames
+
+processed = get_all_processed_filenames()
+print(f"Total processed files: {len(processed)}")
+
+if "PTT-20260302-WA0001.opus" in processed:
+    print("File was processed before")
+```
+
+**Use Cases:**
+- Generating statistics
+- Bulk operations on historical data
+- Migration scripts
+
+**Performance Considerations:**
+- Loads all records into memory
+- Not suitable for databases with thousands of entries
+- Consider using `is_file_processed()` for individual checks instead
+
+---
+
+### migrate_from_logs
+
+```python
+def migrate_from_logs() -> None
+```
+
+Scans existing log files and populates the database with historical data.
+
+This function performs a one-time migration from the legacy log-based tracking system to the new database system.
+
+**Example:**
+
+```python
+from app.db import init_db, migrate_from_logs
+
+# Initialize database
+init_db()
+
+# Migrate historical data from logs
+migrate_from_logs()
+```
+
+**Behavior:**
+
+1. **Check Condition**: Only runs if the database is empty (`COUNT(*) = 0`)
+2. **Log Scanning**: Scans all `*_daily.log` files in `~/.wa-transcriber/logs/transcribed_audio/`
+3. **Pattern Matching**: Uses regex to extract filenames from log entries:
+   ```python
+   log_pattern = re.compile(r"^[●\s]*(.*?)\s*\|")
+   ```
+4. **Bulk Insert**: Uses a transaction for efficient batch insertion
+5. **Console Output**: Prints migration progress
+6. **Filepath Marker**: Sets `filepath` to `"migrated_from_log"` for migrated records
+
+**Example Log Entry:**
+```
+● PTT-20260302-WA0001.opus | ⏳ Transcribing...
+```
+
+**Extracted Filename:**
+```
+PTT-20260302-WA0001.opus
+```
+
+**Console Output:**
+```
+📦 Migration: Restoring history from logs...
+   Done. Migrated 142 records.
+```
+
+**Error Handling:**
+- Returns silently if log directory doesn't exist
+- Skips unreadable log files (prints warning)
+- Uses `INSERT OR IGNORE` to prevent duplicates
+- Rolls back transaction on database errors
+
+---
+
+## Usage Pattern
+
+Typical workflow in the application:
+
+```python
+from app import db
+import os
+
+# Initialize database at startup
+db.init_db()
+db.migrate_from_logs()
+
+# When processing a new audio file
+def process_audio_file(filepath: str):
+    filename = os.path.basename(filepath)
+    
+    # Check if already processed
+    if db.is_file_processed(filename):
+        print(f"Skipping {filename} - already processed")
+        return
+    
+    # Transcribe the file
+    transcription = transcribe(filepath)
+    
+    # Save transcription
+    save_transcription(transcription)
+    
+    # Mark as processed
+    db.add_processed_file(filename, filepath)
+```
+
+---
+
+## Thread Safety
+
+The database module is thread-safe:
+
+1. **SQLite WAL Mode**: Allows concurrent reads and writes
+2. **Connection Per Operation**: Each function opens its own connection
+3. **Context Manager**: Ensures connections are properly closed
+4. **Atomic Operations**: All writes are committed in a single transaction
+
+**Concurrent Usage:**
+```python
+import threading
+from app.db import add_processed_file
+
+def worker(filename, filepath):
+    add_processed_file(filename, filepath)
+
+# Safe to use from multiple threads
+threads = [
+    threading.Thread(target=worker, args=(f"file{i}.opus", f"/path/to/file{i}.opus"))
+    for i in range(10)
+]
+
+for t in threads:
+    t.start()
+for t in threads:
+    t.join()
+```
+
+---
+
+## Security Considerations
+
+1. **File Permissions**: Database file is set to `0o600` (owner read/write only)
+2. **Parameterized Queries**: All SQL queries use parameter substitution to prevent SQL injection
+3. **No Sensitive Data**: Only stores filenames and timestamps (no message content)
+4. **Local Storage**: Database is stored in user's home directory, not synced
+
+---
+
+## Dependencies
+
+```python
+import os
+import re
+import sqlite3
+import datetime
+from app import config
+from colorama import Fore, Style
+from typing import Set, Generator
+from contextlib import contextmanager
+```
+
+---
+
+## Source Location
+
+`~/workspace/source/app/db.py`

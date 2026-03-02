@@ -1,0 +1,360 @@
+---
+title: "utils.py"
+description: "Utility helper functions for system detection, formatting, logging, and more"
+icon: "wrench"
+---
+
+The `utils.py` module provides essential utility functions for the WhatsApp Auto-Transcriber, including hardware detection, duration formatting, system command checking, and log viewing.
+
+## Overview
+
+This module contains standalone helper functions that support various aspects of the application:
+- Hardware acceleration detection (CUDA, MPS, CPU)
+- Memory information retrieval
+- Duration formatting for user-friendly output
+- System command and Python module availability checks
+- Log file viewing and management
+- Banner and terminal UI utilities
+
+## Functions
+
+### format_duration
+
+```python
+def format_duration(seconds: float) -> str
+```
+
+Formats a duration in seconds into a human-readable string.
+e.g. 75.5 -> "1m 15s", 4.2 -> "4.2s"
+
+<ParamField path="seconds" type="float" required>
+  Duration in seconds to format
+</ParamField>
+
+<ResponseField name="return" type="str">
+  Formatted duration string (e.g., "1m 15s" or "4.2s")
+</ResponseField>
+
+**Example:**
+
+```python
+from app.utils import format_duration
+
+# Short duration
+print(format_duration(4.2))  # Output: "4.2s"
+
+# Longer duration
+print(format_duration(75.5))  # Output: "1m 15s"
+
+# Invalid values return safe fallback
+print(format_duration(float('nan')))  # Output: "Unknown duration"
+```
+
+**Behavior:**
+- Handles NaN, infinity, and negative values safely by returning "Unknown duration"
+- Shows minutes and seconds for durations >= 60 seconds
+- Shows decimal seconds for durations < 60 seconds
+
+---
+
+### print_banner
+
+```python
+def print_banner(subtitle: str = "") -> None
+```
+
+Prints the standardized ASCII banner with app name, version, and copyright.
+
+<ParamField path="subtitle" type="str" default="">
+  Optional subtitle to display below the main title
+</ParamField>
+
+**Example:**
+
+```python
+from app.utils import print_banner
+
+print_banner("Setup Wizard")
+# Output:
+# ● wa-transcriber v1.1.0
+#   Setup Wizard
+#   © 2026 Jean Paul Fernandez (@jpxoi)
+#   ──────────────────────────────────────────────────
+```
+
+**Behavior:**
+- Clears the terminal screen
+- Sets the terminal window title to the app name
+- Displays app name, version, optional subtitle, and copyright footer
+- Uses colorama for colored output
+
+---
+
+### get_compute_device
+
+```python
+def get_compute_device() -> str
+```
+
+Smartly selects the best hardware accelerator available.
+
+<ResponseField name="return" type="str">
+  Device identifier: "cuda" (NVIDIA), "mps" (Apple Silicon), or "cpu"
+</ResponseField>
+
+**Example:**
+
+```python
+from app.utils import get_compute_device
+
+device = get_compute_device()
+print(f"Using device: {device}")
+# On Mac with Apple Silicon: "mps"
+# On system with NVIDIA GPU: "cuda"
+# On other systems: "cpu"
+```
+
+**Detection Order:**
+1. CUDA (NVIDIA GPUs) - checked first via `torch.cuda.is_available()`
+2. MPS (Apple Silicon) - checked second via `torch.backends.mps.is_available()`
+3. CPU - fallback if no accelerator is available
+
+---
+
+### get_device_name
+
+```python
+def get_device_name() -> str
+```
+
+Returns a human-readable name for the active accelerator (for UI display).
+
+<ResponseField name="return" type="str">
+  Descriptive device name with hardware details
+</ResponseField>
+
+**Example:**
+
+```python
+from app.utils import get_device_name
+
+print(get_device_name())
+# Examples:
+# "NVIDIA CUDA (NVIDIA GeForce RTX 3080)"
+# "Apple Silicon (MPS)"
+# "CPU Only"
+```
+
+---
+
+### get_memory_info
+
+```python
+def get_memory_info() -> tuple[Optional[float], Literal["vram", "unified", "system"] | None]
+```
+
+Gets the total memory information for the system.
+
+<ResponseField name="return" type="tuple">
+  Tuple containing:
+  - `total_gb` (float | None): Total memory in gigabytes
+  - `memory_type` ("vram" | "unified" | "system" | None): Type of memory detected
+</ResponseField>
+
+**Example:**
+
+```python
+from app.utils import get_memory_info
+
+total_gb, mem_type = get_memory_info()
+
+if total_gb:
+    print(f"Detected {total_gb:.1f} GB of {mem_type}")
+    # Examples:
+    # "Detected 8.0 GB of vram" (NVIDIA GPU)
+    # "Detected 16.0 GB of unified" (Apple Silicon)
+    # "Detected 32.0 GB of system" (Linux RAM)
+else:
+    print("Could not detect memory")
+```
+
+**Detection Logic:**
+1. **NVIDIA VRAM**: Detected via `torch.cuda.get_device_properties(0).total_memory`
+2. **macOS Unified Memory**: Retrieved via `sysctl -n hw.memsize` command
+3. **Linux System RAM**: Read from `/proc/meminfo`
+4. **Windows**: Returns `(None, None)` as fallback
+
+---
+
+### check_command
+
+```python
+def check_command(command) -> tuple[bool, Optional[str]]
+```
+
+Checks if a system command is available in PATH.
+
+<ParamField path="command" type="str" required>
+  The command name to check (e.g., "ffmpeg", "git")
+</ParamField>
+
+<ResponseField name="return" type="tuple[bool, Optional[str]]">
+  Tuple containing:
+  - Boolean indicating if command exists
+  - Path to the command if found, None otherwise
+</ResponseField>
+
+**Example:**
+
+```python
+from app.utils import check_command
+
+available, path = check_command("ffmpeg")
+
+if available:
+    print(f"ffmpeg found at: {path}")
+    # Output: "ffmpeg found at: /usr/local/bin/ffmpeg"
+else:
+    print("ffmpeg not installed")
+```
+
+---
+
+### check_import
+
+```python
+def check_import(module_name) -> bool
+```
+
+Checks if a Python library is installed and importable.
+
+<ParamField path="module_name" type="str" required>
+  The name of the Python module to check
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the module is installed, False otherwise
+</ResponseField>
+
+**Example:**
+
+```python
+from app.utils import check_import
+
+if check_import("torch"):
+    print("PyTorch is installed")
+else:
+    print("PyTorch is NOT installed")
+
+if check_import("openai-whisper"):
+    print("Whisper is available")
+```
+
+---
+
+### show_logs
+
+```python
+def show_logs(
+    type: Literal["app", "transcribed_audio"],
+    lines_to_show: int = 50
+) -> None
+```
+
+Finds the most recent log file and prints the last N lines.
+
+<ParamField path="type" type="Literal['app', 'transcribed_audio']" required>
+  Type of logs to display:
+  - `"app"`: Application logs from `~/.wa-transcriber/logs/app/`
+  - `"transcribed_audio"`: Transcription logs from `~/.wa-transcriber/logs/transcribed_audio/`
+</ParamField>
+
+<ParamField path="lines_to_show" type="int" default={50}>
+  Number of recent lines to display from the log file
+</ParamField>
+
+**Example:**
+
+```python
+from app.utils import show_logs
+
+# Show last 50 lines of transcription logs
+show_logs("transcribed_audio")
+
+# Show last 100 lines of app logs
+show_logs("app", lines_to_show=100)
+```
+
+**Behavior:**
+- Automatically finds the most recent `*_daily.log` file in the log directory
+- Displays logs with a subtle border for readability
+- Shows the log filename being read
+- Efficiently reads only the last N lines using `collections.deque`
+- Handles file encoding errors gracefully
+- Displays full log directory path at the bottom
+
+---
+
+## Additional Functions
+
+The module also includes these internal helper functions:
+
+### clear_screen
+
+```python
+def clear_screen() -> None
+```
+
+Clears the terminal screen in a cross-platform way.
+
+---
+
+### set_window_title
+
+```python
+def set_window_title(title: str) -> None
+```
+
+Sets the terminal window title.
+
+<ParamField path="title" type="str" required>
+  The title to set for the terminal window
+</ParamField>
+
+**Platform Support:**
+- Windows: Uses `title` command
+- macOS/Linux: Uses ANSI escape sequence `\x1b]2;{title}\x07`
+
+---
+
+## Dependencies
+
+```python
+import os
+import sys
+import shutil
+import torch
+import platform
+import subprocess
+import importlib.util
+import math
+from pathlib import Path
+from collections import deque
+from colorama import Fore, Style
+from typing import Optional, Literal, cast
+from app import config
+```
+
+## Usage in the Application
+
+The utils module is used throughout the application:
+
+- **Startup**: `print_banner()` displays the app header
+- **Hardware Detection**: `get_compute_device()` selects the optimal device for Whisper
+- **User Feedback**: `format_duration()` shows transcription times
+- **Dependency Checking**: `check_command()` and `check_import()` verify requirements
+- **Debugging**: `show_logs()` provides easy access to recent activity
+
+## Source Location
+
+`~/workspace/source/app/utils.py`

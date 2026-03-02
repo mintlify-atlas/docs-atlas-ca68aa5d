@@ -1,0 +1,167 @@
+---
+title: wa-transcriber reset
+description: Reset application data and configuration
+icon: rotate-left
+---
+
+The `reset` command deletes all application data, including configuration, logs, and transcription history.
+
+## Usage
+
+```bash
+wa-transcriber reset
+```
+
+### Skip Confirmation
+
+```bash
+wa-transcriber reset --yes
+wa-transcriber reset -y
+```
+
+## Options
+
+<ParamField path="--yes" type="boolean" default="false">
+  Skip confirmation prompt and reset immediately.
+  
+  **Aliases**: `-y`
+</ParamField>
+
+## Behavior
+
+### Interactive Mode (Default)
+
+By default, the command prompts for confirmation:
+
+```bash
+$ wa-transcriber reset
+● wa-transcriber v1.1.0
+  Reset Application
+  © 2026 Jean Paul Fernandez (@jpxoi)
+──────────────────────────────────────────────────
+? Are you sure you want to reset all application data? This cannot be undone. No
+```
+
+If you confirm:
+
+```bash
+$ wa-transcriber reset
+● wa-transcriber v1.1.0
+  Reset Application
+──────────────────────────────────────────────────
+? Are you sure you want to reset all application data? This cannot be undone. Yes
+Successfully reset application data.
+```
+
+### Force Mode
+
+With the `--yes` flag, confirmation is skipped:
+
+```bash
+$ wa-transcriber reset --yes
+Successfully reset application data.
+```
+
+## What Gets Deleted
+
+The reset command removes the entire application data directory:
+
+```
+~/.wa-transcriber/
+├── config.json          # Your configuration
+├── history.db           # Transcription history database
+└── logs/
+    ├── app/             # Application logs
+    └── transcribed_audio/  # Transcription logs
+```
+
+<Warning>
+  **This action is irreversible.** All of the following will be permanently deleted:
+  
+  - Configuration settings
+  - Transcription history (prevents re-processing detection)
+  - Application logs
+  - Transcription logs with timestamps
+</Warning>
+
+## After Reset
+
+After resetting, you'll need to run setup again:
+
+```bash
+$ wa-transcriber
+● wa-transcriber v1.1.0
+  Setup Wizard
+  © 2026 Jean Paul Fernandez (@jpxoi)
+──────────────────────────────────────────────────
+📂 Configuration will be saved to: ~/.wa-transcriber/config.json
+
+? Which transcription model would you like to use? ...
+```
+
+The application automatically launches the [setup wizard](/cli/setup) when no configuration is found.
+
+## What Doesn't Get Deleted
+
+The reset command does **not** delete:
+
+- **Whisper model files** - Located in `~/.cache/whisper/` (macOS/Linux) or `%USERPROFILE%\.cache\whisper\` (Windows)
+- **Your WhatsApp voice notes** - The original audio files remain untouched
+- **Clipboard history** - Previously copied transcriptions
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Clean Installation" icon="broom">
+    Start fresh with default settings after testing different configurations.
+  </Card>
+  
+  <Card title="Troubleshooting" icon="screwdriver-wrench">
+    Fix corrupted configuration or database issues.
+  </Card>
+  
+  <Card title="Privacy" icon="user-lock">
+    Remove all transcription history before transferring the computer.
+  </Card>
+  
+  <Card title="Reconfiguration" icon="gear">
+    Quickly reset to run the setup wizard with a clean slate.
+  </Card>
+</CardGroup>
+
+## Example: Force Reset
+
+```bash
+$ wa-transcriber reset -y
+Successfully reset application data.
+
+$ wa-transcriber config
+# Launches setup wizard since config.json doesn't exist
+```
+
+## Error Handling
+
+If the reset fails:
+
+```bash
+Failed to reset application data: Permission denied
+```
+
+This typically indicates a permission issue. Try:
+
+```bash
+sudo wa-transcriber reset -y
+```
+
+<Tip>
+  To preserve your configuration while clearing history, manually delete only the database:
+  
+  ```bash
+  rm ~/.wa-transcriber/history.db
+  ```
+</Tip>
+
+## Related Commands
+
+- [`wa-transcriber setup`](/cli/setup) - Reconfigure after reset
+- [`wa-transcriber config`](/cli/config) - View current configuration before reset

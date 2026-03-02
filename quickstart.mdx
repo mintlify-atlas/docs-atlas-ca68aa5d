@@ -1,80 +1,232 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get up and running with WhatsApp Auto-Transcriber in under 5 minutes
 ---
 
-## Get started in three steps
+Get WhatsApp Auto-Transcriber installed, configured, and transcribing your first voice note in minutes.
 
-Get your documentation site running locally and make your first customization.
+## Installation
 
-### Step 1: Set up your local environment
+<Steps>
+  <Step title="Install the package">
+    Install WhatsApp Auto-Transcriber using pip:
+
+    ```bash
+    git clone https://github.com/jpxoi/wa-transcriber.git
+    cd wa-transcriber
+    pip install .
+    ```
+
+    This installs the `wa-transcriber` command-line tool.
+  </Step>
+
+  <Step title="Run the health check">
+    Before configuring, run the health check to verify your system:
+
+    ```bash
+    wa-transcriber health
+    ```
+
+    The health check will:
+    - Detect hardware acceleration (CUDA/MPS/CPU)
+    - Verify FFmpeg installation
+    - Check Python dependencies
+    - Suggest the optimal Whisper model for your hardware
+    - Verify WhatsApp path detection
+
+    <Tip>
+      The health check suggests the best model size based on your available RAM/VRAM. Follow its recommendations for optimal performance.
+    </Tip>
+  </Step>
+
+  <Step title="Run the interactive setup">
+    Configure the tool using the interactive setup wizard:
+
+    ```bash
+    wa-transcriber setup
+    ```
+
+    The wizard will guide you through:
+
+    **Core settings:**
+    - **Model selection**: Choose from tiny, base, small, medium, turbo, or large (turbo recommended)
+    - **Language**: Auto-detect or specify a language code (e.g., 'en', 'es')
+    - **WhatsApp path**: Auto-detected or manually specified
+
+    **Advanced settings (optional):**
+    - Startup scan lookback hours
+    - Model cleanup retention days
+    - Memory limit factors
+    - Hardware-specific optimizations
+
+    Configuration is saved to `~/.wa-transcriber/config.json`.
+  </Step>
+
+  <Step title="Start transcribing">
+    Run the transcriber:
+
+    ```bash
+    wa-transcriber
+    ```
+
+    You'll see output like:
+
+    ```
+    🚀 Initializing System
+       Device: CUDA
+       Model:  turbo
+       ⏳ Loading...
+    ✓ System Ready!
+
+    🔍 Startup Scan: Checking for missed files (last 1h)...
+       ✓ All caught up.
+
+    📂 Logs saved to: ~/.wa-transcriber/logs/transcribed_audio
+
+    👀 Watching Folder:
+       /path/to/WhatsApp/Media
+    ────────────────────────────────────────────────────
+       Press Ctrl+C to stop the script.
+    ```
+
+    Now send yourself a WhatsApp voice note and watch it get transcribed automatically!
+  </Step>
+</Steps>
+
+## Your first transcription
+
+Once the transcriber is running:
+
+1. **Send a voice note** in WhatsApp Desktop
+2. **Wait for download** (enable auto-download in WhatsApp settings)
+3. **See real-time output**:
+   ```
+   [12:34:56] ⚡️ [WORKING] Processing: audio_file.opus (0:15)
+
+   ✓ [DONE in 1.2s] Transcript:
+      Hello, this is a test voice note.
+      📋 Copied to clipboard
+   ```
+4. **Paste anywhere** with Cmd+V (macOS) or Ctrl+V (Windows)
+
+The transcript is also saved to daily logs in `~/.wa-transcriber/logs/transcribed_audio/`.
+
+## Common workflows
+
+### Running in the background
+
+<Tabs>
+  <Tab title="macOS">
+    Keep the terminal running in the background or use:
+    ```bash
+    nohup wa-transcriber > /dev/null 2>&1 &
+    ```
+  </Tab>
+  <Tab title="Windows">
+    Run in a PowerShell window or use Windows Task Scheduler to run at startup.
+  </Tab>
+</Tabs>
+
+### View configuration
+
+Check your current settings:
+```bash
+wa-transcriber config
+```
+
+### View logs
+
+See recent transcriptions:
+```bash
+wa-transcriber logs audio
+```
+
+See application logs:
+```bash
+wa-transcriber logs app
+```
+
+### Reset everything
+
+Start fresh (removes config and database, keeps Whisper models):
+```bash
+wa-transcriber reset
+```
+
+## Troubleshooting
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
+  <Accordion title="Script doesn't trigger when I receive a voice note">
+    **Solution**: Enable **Media Auto-Download** in WhatsApp Desktop settings:
+    1. Open WhatsApp Desktop → Settings → Storage and Data
+    2. Enable auto-download for voice notes
+    3. Alternatively, manually click the download button on the voice note
   </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
+
+  <Accordion title="CUDA out of memory error">
+    **Solution**: Run the health check and switch to a smaller model:
+    ```bash
+    wa-transcriber health
+    wa-transcriber setup
+    ```
+    Select a smaller model (e.g., medium → small → base → tiny).
+
+    Or adjust VRAM limits in `~/.wa-transcriber/config.json`:
+    ```json
+    {
+      "NVIDIA_VRAM_LIMIT_FACTOR": 0.6
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Slow transcription performance">
+    **Possible causes:**
+    1. **Not using GPU acceleration**
+       - Run `wa-transcriber health`
+       - Look for "Accelerator: Active" (not CPU)
+
+    2. **Use smaller model** for faster processing:
+       - turbo → ~1.5s per voice note
+       - small → ~2s per voice note
+       - tiny → less than 1s per voice note
+
+    3. **Verify you're using the right model for your hardware**:
+       Run health check to see if you're over-provisioned
+  </Accordion>
+
+  <Accordion title="Clipboard unavailable">
+    **macOS/Windows**: Usually works out of the box
+
+    **Linux**: Install clipboard utilities:
+    ```bash
+    # Ubuntu/Debian
+    sudo apt install xclip
+
+    # Fedora
+    sudo dnf install xclip
+    ```
   </Accordion>
 </AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
+You're now successfully transcribing WhatsApp voice notes! Explore more:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="CLI Reference" icon="terminal" href="/cli/overview">
+    Learn all available commands
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/overview">
+    Deep dive into advanced settings
+  </Card>
+  <Card title="Optimization" icon="gauge" href="/guides/optimization">
+    Tune performance for your hardware
+  </Card>
+  <Card title="Troubleshooting" icon="screwdriver-wrench" href="/troubleshooting/common-issues">
+    Detailed solutions for common issues
+  </Card>
 </CardGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  **Need help?** [Report issues or ask questions on GitHub](https://github.com/jpxoi/wa-transcriber/issues)
 </Note>

@@ -1,0 +1,171 @@
+---
+title: wa-transcriber config
+description: Display current application configuration
+icon: gear
+---
+
+The `config` command displays all current configuration settings in a formatted, organized view.
+
+## Usage
+
+```bash
+wa-transcriber config
+```
+
+## Output
+
+The configuration is displayed in organized groups:
+
+```bash
+● wa-transcriber v1.1.0
+  Current Configuration
+  © 2026 Jean Paul Fernandez (@jpxoi)
+──────────────────────────────────────────────────
+ 🤖 Core Settings
+   • Model Size                 turbo
+   • Transcription Language     Auto / None
+   • File Ready Timeout         10s
+
+ 🧹 Automation & Cleanup
+   • Scan Lookback              Enabled
+      Lookback Depth            1 hours
+   • Model Cleanup              Enabled
+      Retention Period          3 days
+
+ ⚡ Hardware Limits
+   • System Memory Limit        50%
+   • NVIDIA VRAM Limit          70%
+   • Apple MPS FP16             Disabled
+
+ 📂 Paths
+   • WhatsApp Media Path        Auto-Detected (Default)
+
+──────────────────────────────────────────────────
+ ➜ To Change:     Run wa-transcriber setup
+ ➜ Config File: ~/.wa-transcriber/config.json
+```
+
+## Configuration Groups
+
+### Core Settings
+
+<ParamField path="Model Size" type="string" default="turbo">
+  The Whisper model used for transcription. Options: `tiny`, `base`, `small`, `medium`, `turbo`, `large`.
+</ParamField>
+
+<ParamField path="Transcription Language" type="string" default="null">
+  Forced language code (e.g., `en`, `es`). When `null`, language is auto-detected.
+</ParamField>
+
+<ParamField path="File Ready Timeout" type="integer" default="10">
+  Seconds to wait for files to be fully written before transcription.
+</ParamField>
+
+### Automation & Cleanup
+
+<ParamField path="Scan Lookback" type="boolean" default="true">
+  Whether to scan for missed files on startup.
+</ParamField>
+
+<ParamField path="Lookback Depth" type="integer" default="1">
+  Hours to look back when scanning for missed files (only shown if Scan Lookback is enabled).
+</ParamField>
+
+<ParamField path="Model Cleanup" type="boolean" default="true">
+  Whether to automatically delete unused Whisper model files.
+</ParamField>
+
+<ParamField path="Retention Period" type="integer" default="3">
+  Days to retain unused model files before deletion (only shown if Model Cleanup is enabled).
+</ParamField>
+
+### Hardware Limits
+
+<ParamField path="System Memory Limit" type="percentage" default="50%">
+  Maximum percentage of system RAM to use for the Whisper model.
+</ParamField>
+
+<ParamField path="NVIDIA VRAM Limit" type="percentage" default="70%">
+  Maximum percentage of GPU VRAM to use (NVIDIA GPUs only).
+</ParamField>
+
+<ParamField path="Apple MPS FP16" type="boolean" default="false">
+  Enable FP16 mode for Apple Silicon MPS (can improve performance but may reduce accuracy).
+</ParamField>
+
+### Paths
+
+<ParamField path="WhatsApp Media Path" type="string" default="Auto-Detected">
+  Location of WhatsApp media folder. Shows "Auto-Detected (Default)" when using system detection, or the custom path when `MANUAL_PATH_OVERRIDE` is set.
+</ParamField>
+
+## Configuration File
+
+The configuration is stored in JSON format:
+
+**Location**: `~/.wa-transcriber/config.json`
+
+**Example**:
+
+```json
+{
+    "MODEL_SIZE": "turbo",
+    "TRANSCRIPTION_LANGUAGE": null,
+    "SCAN_LOOKBACK_ENABLED": true,
+    "SCAN_LOOKBACK_HOURS": 1,
+    "MODEL_CLEANUP_ENABLED": true,
+    "MODEL_RETENTION_DAYS": 3,
+    "ENABLE_MPS_FP16": false,
+    "SYSTEM_MEMORY_LIMIT_FACTOR": 0.5,
+    "NVIDIA_VRAM_LIMIT_FACTOR": 0.7,
+    "FILE_READY_TIMEOUT": 10,
+    "MANUAL_PATH_OVERRIDE": null
+}
+```
+
+<Warning>
+  While you can edit `config.json` directly, it's recommended to use `wa-transcriber setup` to ensure values are validated.
+</Warning>
+
+## Value Formatting
+
+The output uses color coding for better readability:
+
+- **Enabled/True**: Green
+- **Disabled/False**: Dimmed
+- **Auto/None**: Yellow
+- **Values**: Cyan
+
+## Modifying Configuration
+
+To change configuration settings, run:
+
+```bash
+wa-transcriber setup
+```
+
+This launches the interactive wizard that validates your inputs.
+
+## Configuration Defaults
+
+If no configuration file exists, these defaults are used:
+
+| Setting | Default Value |
+|---------|---------------|
+| `MODEL_SIZE` | `"turbo"` |
+| `TRANSCRIPTION_LANGUAGE` | `null` (auto-detect) |
+| `SCAN_LOOKBACK_ENABLED` | `true` |
+| `SCAN_LOOKBACK_HOURS` | `1` |
+| `MODEL_CLEANUP_ENABLED` | `true` |
+| `MODEL_RETENTION_DAYS` | `3` |
+| `ENABLE_MPS_FP16` | `false` |
+| `SYSTEM_MEMORY_LIMIT_FACTOR` | `0.5` (50%) |
+| `NVIDIA_VRAM_LIMIT_FACTOR` | `0.7` (70%) |
+| `FILE_READY_TIMEOUT` | `10` seconds |
+| `MANUAL_PATH_OVERRIDE` | `null` (auto-detect) |
+
+## Related Commands
+
+- [`wa-transcriber setup`](/cli/setup) - Modify configuration interactively
+- [`wa-transcriber health`](/cli/health) - Verify configuration against system capabilities
+- [`wa-transcriber reset`](/cli/reset) - Delete configuration and start fresh

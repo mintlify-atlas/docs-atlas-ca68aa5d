@@ -1,0 +1,435 @@
+---
+title: Windows Setup Guide
+description: Complete setup and optimization guide for WhatsApp Auto-Transcriber on Windows
+---
+
+# Windows Setup Guide
+
+This guide covers Windows-specific setup, GPU acceleration, and troubleshooting for WhatsApp Auto-Transcriber.
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install FFmpeg">
+    FFmpeg is required for audio processing.
+
+    <Tabs>
+      <Tab title="Chocolatey (Recommended)">
+        Install via [Chocolatey](https://chocolatey.org/) package manager:
+
+        ```powershell
+        choco install ffmpeg
+        ```
+
+        Verify the installation:
+
+        ```powershell
+        ffmpeg -version
+        ```
+      </Tab>
+
+      <Tab title="Manual Installation">
+        1. Download FFmpeg from [ffmpeg.org](https://ffmpeg.org/download.html)
+        2. Extract to `C:\ffmpeg`
+        3. Add `C:\ffmpeg\bin` to your System PATH
+        4. Restart your terminal and verify:
+
+        ```powershell
+        ffmpeg -version
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Install Python 3.10+">
+    Download and install Python from [python.org](https://www.python.org/downloads/).
+
+    <Warning>
+      During installation, check **"Add Python to PATH"** to ensure Python is accessible from the command line.
+    </Warning>
+
+    Verify the installation:
+
+    ```powershell
+    python --version
+    ```
+  </Step>
+
+  <Step title="Install WhatsApp Desktop (Store Version)">
+    <Warning>
+      **Only the Microsoft Store version is supported.** The direct download version uses a different file structure.
+    </Warning>
+
+    Install from the [Microsoft Store](https://www.microsoft.com/store/apps/9nksqgp7f2nh).
+
+    **Default Path:**
+    ```
+    %LOCALAPPDATA%\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers
+    ```
+  </Step>
+
+  <Step title="Install NVIDIA GPU Drivers (Optional)">
+    For GPU acceleration with NVIDIA CUDA:
+
+    1. Verify you have a CUDA-capable GPU (GeForce GTX 900 series or newer)
+    2. Download and install the latest [NVIDIA Game Ready Drivers](https://www.nvidia.com/download/index.aspx)
+    3. Install [CUDA Toolkit 11.8+](https://developer.nvidia.com/cuda-downloads)
+    4. PyTorch will automatically detect and use CUDA if available
+  </Step>
+</Steps>
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    ```powershell
+    git clone https://github.com/jpxoi/wa-transcriber.git
+    cd wa-transcriber
+    ```
+  </Step>
+
+  <Step title="Install the package">
+    ```powershell
+    pip install .
+    ```
+
+    Or use a virtual environment:
+
+    ```powershell
+    python -m venv venv
+    .\venv\Scripts\activate
+    pip install .
+    ```
+  </Step>
+
+  <Step title="Run health check">
+    Verify your system is ready and get model recommendations:
+
+    ```powershell
+    wa-transcriber health
+    ```
+
+    This will:
+    - Detect NVIDIA CUDA GPU (if available)
+    - Analyze your VRAM or system RAM
+    - Suggest the optimal Whisper model size
+    - Verify FFmpeg installation
+  </Step>
+
+  <Step title="Configure the application">
+    Run the interactive setup wizard:
+
+    ```powershell
+    wa-transcriber setup
+    ```
+
+    The app will automatically detect your WhatsApp Media folder and suggest optimal settings.
+  </Step>
+</Steps>
+
+## NVIDIA GPU Acceleration
+
+### CUDA Support
+
+The app automatically detects and uses NVIDIA CUDA when available. This provides significant performance improvements:
+
+**Performance Comparison:**
+- **CPU Only:** ~30-60 seconds per minute of audio
+- **NVIDIA GPU (CUDA):** ~3-10 seconds per minute of audio
+
+**Supported GPUs:**
+- GeForce RTX 20/30/40 series (recommended)
+- GeForce GTX 1600/1000/900 series
+- Quadro/Tesla cards with Compute Capability 3.5+
+
+### VRAM Management
+
+The app respects the `NVIDIA_VRAM_LIMIT_FACTOR` setting to prevent out-of-memory errors:
+
+```json
+{
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.7
+}
+```
+
+This limits the app to using 70% of your GPU's VRAM, leaving headroom for Windows and other apps (games, browsers, etc.).
+
+**Recommended settings by GPU:**
+
+| GPU | VRAM | Recommended Model | VRAM Limit Factor |
+|-----|------|-------------------|-------------------|
+| RTX 4090 | 24GB | `large-v3` | 0.7 |
+| RTX 4080/4070 Ti | 16GB | `turbo` or `large-v3` | 0.7 |
+| RTX 4070/3080 | 12GB | `turbo` | 0.7 |
+| RTX 3070/4060 | 8GB | `medium` or `turbo` | 0.6 |
+| RTX 3060/2060 | 6GB | `small` or `medium` | 0.6 |
+| GTX 1660/1650 | 4-6GB | `small` | 0.5 |
+
+### GPU Memory Optimization
+
+If you experience CUDA out-of-memory errors:
+
+1. **Close other GPU-intensive apps** (games, browsers with hardware acceleration)
+2. **Reduce VRAM limit factor:**
+   ```json
+   {
+     "NVIDIA_VRAM_LIMIT_FACTOR": 0.5
+   }
+   ```
+
+3. **Use a smaller model:**
+   ```bash
+   wa-transcriber health
+   ```
+   Follow the model size recommendation.
+
+4. **Monitor GPU usage:**
+   ```powershell
+   nvidia-smi
+   ```
+
+## WhatsApp Path Detection
+
+The app automatically detects the WhatsApp Store version path:
+
+**Location in config.py:**
+```python
+# config.py:256-264
+local_app_data = os.getenv("LOCALAPPDATA", "")
+_win_store = os.path.join(
+    local_app_data,
+    "Packages",
+    "5319275A.WhatsAppDesktop_cv1g1gvanyjgm",
+    "LocalState",
+    "shared",
+    "transfers",
+)
+```
+
+**Typical path:**
+```
+C:\Users\YourUsername\AppData\Local\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers
+```
+
+### Manual Path Override
+
+If auto-detection fails, manually set the path in config.json:
+
+```json
+{
+  "MANUAL_PATH_OVERRIDE": "C:\\Users\\YourUsername\\AppData\\Local\\Packages\\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\\LocalState\\shared\\transfers"
+}
+```
+
+<Note>
+  Use double backslashes (`\\`) in JSON to escape Windows paths.
+</Note>
+
+## Performance Optimization Tips
+
+### 1. Choose the Right Model
+
+Run the health check to get GPU-specific recommendations:
+
+```powershell
+wa-transcriber health
+```
+
+Example output for RTX 3070:
+```
+🚀 Accelerator           Active (NVIDIA GeForce RTX 3070)
+
+💾 Memory Rule             70% of VRAM (8.0GB)
+    Safe Allowance:      5.6 GB
+
+  Optimization Analysis:
+  Recommended (turbo): [■■■■■■■■■■■■■■■·····] 75% (Leaves ~1.4 GB Headroom)
+
+  Result:
+  We suggest:          'turbo'
+  Your Config:         'base'
+
+  OPTIMIZATION: Your hardware is under-utilized.
+     You use 'base', but can handle 'turbo'.
+     ➜ Switch to 'turbo' in config.json for better accuracy.
+```
+
+### 2. Enable Model Cleanup
+
+Models are cached in `%USERPROFILE%\.cache\whisper\`. Enable automatic cleanup:
+
+```json
+{
+  "MODEL_CLEANUP_ENABLED": true,
+  "MODEL_RETENTION_DAYS": 3
+}
+```
+
+### 3. Adjust Startup Scan
+
+Control how many hours of missed messages to scan on startup:
+
+```json
+{
+  "SCAN_LOOKBACK_ENABLED": true,
+  "SCAN_LOOKBACK_HOURS": 1
+}
+```
+
+## Troubleshooting
+
+### "CUDA out of memory"
+
+This error means your selected model exceeds your GPU's available VRAM.
+
+**Solution:**
+
+<Steps>
+  <Step title="Check current GPU usage">
+    ```powershell
+    nvidia-smi
+    ```
+
+    Look at the "Memory-Usage" column. Close other GPU-intensive apps.
+  </Step>
+
+  <Step title="Run health check">
+    ```powershell
+    wa-transcriber health
+    ```
+
+    Note the recommended model size.
+  </Step>
+
+  <Step title="Switch to smaller model">
+    Edit `~/.wa-transcriber/config.json`:
+
+    ```json
+    {
+      "MODEL_SIZE": "medium"
+    }
+    ```
+  </Step>
+
+  <Step title="Or reduce VRAM limit">
+    ```json
+    {
+      "NVIDIA_VRAM_LIMIT_FACTOR": 0.5
+    }
+    ```
+  </Step>
+</Steps>
+
+### WhatsApp Path Not Found
+
+<Warning>
+  Only the **Microsoft Store version** of WhatsApp Desktop is supported. The direct download version will not work.
+</Warning>
+
+**Verify installation:**
+
+1. Check if the path exists:
+   ```powershell
+   dir "%LOCALAPPDATA%\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers"
+   ```
+
+2. If it doesn't exist, reinstall WhatsApp from the [Microsoft Store](https://www.microsoft.com/store/apps/9nksqgp7f2nh)
+
+3. If the path exists but isn't detected, manually set it in config.json
+
+### FFmpeg Not Found
+
+If the health check reports FFmpeg is missing:
+
+```powershell
+choco install ffmpeg
+```
+
+Or verify FFmpeg is in your PATH:
+
+```powershell
+where ffmpeg
+```
+
+### PyTorch Not Detecting CUDA
+
+If you have an NVIDIA GPU but the app uses CPU:
+
+1. Verify CUDA installation:
+   ```powershell
+   nvidia-smi
+   ```
+
+2. Check PyTorch CUDA support:
+   ```python
+   python -c "import torch; print(torch.cuda.is_available())"
+   ```
+
+3. If it returns `False`, reinstall PyTorch with CUDA:
+   ```powershell
+   pip uninstall torch
+   pip install torch --index-url https://download.pytorch.org/whl/cu118
+   ```
+
+## Logs and Debugging
+
+All logs are stored in `%USERPROFILE%\.wa-transcriber\logs\`:
+
+```powershell
+# View transcribed audio logs
+wa-transcriber logs audio
+
+# View application logs
+wa-transcriber logs app
+
+# Or navigate manually
+explorer %USERPROFILE%\.wa-transcriber\logs\
+```
+
+## Advanced Configuration
+
+### Running as Background Service
+
+You can run the transcriber as a background service using Windows Task Scheduler:
+
+1. Open Task Scheduler
+2. Create a new task with trigger "At log on"
+3. Action: Start a program
+   - Program: `wa-transcriber`
+   - Start in: `C:\path\to\wa-transcriber`
+4. Settings: Run whether user is logged on or not
+
+### Custom File Ready Timeout
+
+Some systems may need more time for files to be fully written:
+
+```json
+{
+  "FILE_READY_TIMEOUT": 15
+}
+```
+
+Default is 10 seconds. Increase if you see "file not ready" errors.
+
+### Language-Specific Transcription
+
+Force a specific language for better accuracy:
+
+```json
+{
+  "TRANSCRIPTION_LANGUAGE": "es"
+}
+```
+
+Leave as `null` for auto-detection.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Optimization Guide" icon="gauge" href="/guides/optimization">
+    Learn advanced performance tuning strategies
+  </Card>
+  <Card title="Workflows" icon="sitemap" href="/guides/workflows">
+    Discover efficient daily usage patterns
+  </Card>
+</CardGroup>

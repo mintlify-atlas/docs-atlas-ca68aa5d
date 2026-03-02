@@ -1,0 +1,582 @@
+---
+title: WhatsApp Path Detection
+description: Troubleshoot WhatsApp Media folder detection and path configuration
+---
+
+This page explains how WhatsApp Auto-Transcriber locates your WhatsApp Media folder and how to troubleshoot path detection issues.
+
+## How Path Detection Works
+
+The transcriber automatically detects WhatsApp's Media folder using platform-specific default locations.
+
+### Detection Priority
+
+From config.py:275-288, the detection logic follows this order:
+
+1. **Manual Override** - If set in `config.json`, this is used first
+2. **Auto-Detection** - Searches platform-specific default paths
+3. **Store Version** - Checked before legacy paths
+4. **Legacy Version** - Fallback for older installations
+
+### Source Code Reference
+
+```python
+def detect_whatsapp_path() -> None:
+    global WHATSAPP_INTERNAL_PATH
+    
+    # 1. Check Manual Override
+    if MANUAL_PATH_OVERRIDE and os.path.exists(MANUAL_PATH_OVERRIDE):
+        WHATSAPP_INTERNAL_PATH = MANUAL_PATH_OVERRIDE
+        return
+    
+    # 2. Check Auto-Detect
+    WHATSAPP_INTERNAL_PATH = find_default_whatsapp_path()
+```
+
+## Platform-Specific Paths
+
+<Accordion title="macOS Paths" icon="apple">
+
+### Default Locations
+
+From config.py:244-253, macOS has two possible locations:
+
+#### Store Version (Preferred)
+
+```
+~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+```
+
+This is used by the **Mac App Store version** of WhatsApp Desktop.
+
+#### Legacy/Direct Download Version
+
+```
+~/Library/Application Support/WhatsApp/Media
+```
+
+This is used by the **direct download version** from whatsapp.com.
+
+### Detection Order
+
+The transcriber checks Store version first, then falls back to legacy:
+
+```python
+if _mac_store.exists():
+    detected_path = str(_mac_store)
+elif _mac_direct.exists():
+    detected_path = str(_mac_direct)
+```
+
+### Verification
+
+Check which version you have:
+
+```bash
+# Check for Store version
+ls ~/Library/Group\ Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+
+# Check for Legacy version
+ls ~/Library/Application\ Support/WhatsApp/Media
+```
+
+### Common Issues
+
+#### Path Not Found
+
+**Cause:** WhatsApp Desktop not installed from App Store
+
+**Solution:** 
+1. Uninstall current WhatsApp Desktop
+2. Install from Mac App Store
+3. Re-run setup:
+   ```bash
+   wa-transcriber setup
+   ```
+
+#### Permission Denied
+
+**Cause:** Terminal lacks Full Disk Access
+
+**Solution:**
+1. Open **System Preferences** > **Security & Privacy** > **Privacy**
+2. Select **Full Disk Access**
+3. Add your terminal app (Terminal.app or iTerm)
+4. Restart terminal
+
+</Accordion>
+
+<Accordion title="Windows Paths" icon="windows">
+
+### Default Locations
+
+From config.py:256-270, Windows has two possible locations:
+
+#### Store Version (Preferred)
+
+```
+%LOCALAPPDATA%\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers
+```
+
+Full path example:
+```
+C:\Users\YourName\AppData\Local\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers
+```
+
+This is used by the **Microsoft Store version** of WhatsApp Desktop.
+
+#### Legacy/Direct Download Version
+
+```
+%LOCALAPPDATA%\WhatsApp\Media
+```
+
+Full path example:
+```
+C:\Users\YourName\AppData\Local\WhatsApp\Media
+```
+
+This is used by the **direct download version** from whatsapp.com.
+
+### Detection Order
+
+The transcriber checks Store version first, then falls back to legacy:
+
+```python
+if os.path.exists(_win_store):
+    detected_path = _win_store
+elif os.path.exists(_win_legacy):
+    detected_path = _win_legacy
+```
+
+### Verification
+
+Check which version you have (PowerShell):
+
+```powershell
+# Check for Store version
+Test-Path "$env:LOCALAPPDATA\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers"
+
+# Check for Legacy version
+Test-Path "$env:LOCALAPPDATA\WhatsApp\Media"
+```
+
+Or using File Explorer:
+
+1. Press `Win + R`
+2. Type: `%LOCALAPPDATA%`
+3. Navigate to either:
+   - `Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers`
+   - `WhatsApp\Media`
+
+### Common Issues
+
+#### Path Not Found
+
+**Cause:** WhatsApp Desktop not installed from Microsoft Store
+
+**Solution:** 
+1. Uninstall current WhatsApp Desktop
+2. Install from Microsoft Store
+3. Re-run setup:
+   ```bash
+   wa-transcriber setup
+   ```
+
+#### Access Denied
+
+**Cause:** Windows Store app sandbox restrictions
+
+**Solution:**
+1. Run Command Prompt/PowerShell as Administrator
+2. Or manually set the path (see Manual Override section below)
+
+</Accordion>
+
+<Accordion title="Linux Paths" icon="linux">
+
+### Linux Support
+
+Linux is **not officially supported** because:
+- WhatsApp Desktop for Linux uses different storage mechanisms
+- Paths vary significantly between distributions
+- The official WhatsApp Desktop app structure differs from Windows/macOS
+
+### Workarounds
+
+If you're using WhatsApp Web wrappers or unofficial clients:
+
+1. Locate where voice notes are stored
+2. Use Manual Path Override (see below)
+
+### Common Locations to Check
+
+```bash
+~/.config/WhatsApp/
+~/.local/share/WhatsApp/
+~/snap/whatsapp-for-linux/
+```
+
+</Accordion>
+
+## Manual Path Configuration
+
+<Accordion title="Setting MANUAL_PATH_OVERRIDE" icon="gear">
+
+### When to Use
+
+Use manual path override when:
+- Auto-detection fails
+- Using a non-standard WhatsApp installation
+- WhatsApp data is on a different drive
+- Using a custom or portable installation
+
+### Configuration Method
+
+#### Option 1: Via Setup Wizard (Recommended)
+
+```bash
+wa-transcriber setup
+```
+
+When prompted:
+1. Choose "Manually specify path"
+2. Enter the full path to your WhatsApp Media folder
+3. Path will be validated before saving
+
+#### Option 2: Direct Config Edit
+
+Edit `~/.wa-transcriber/config.json`:
+
+```json
+{
+  "MANUAL_PATH_OVERRIDE": "/path/to/whatsapp/media"
+}
+```
+
+**macOS Example:**
+```json
+{
+  "MANUAL_PATH_OVERRIDE": "/Users/john/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media"
+}
+```
+
+**Windows Example:**
+```json
+{
+  "MANUAL_PATH_OVERRIDE": "C:\\Users\\John\\AppData\\Local\\Packages\\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\\LocalState\\shared\\transfers"
+}
+```
+
+**Note:** On Windows, use double backslashes (`\\`) in JSON.
+
+### Verification
+
+After setting the path, verify it's recognized:
+
+```bash
+wa-transcriber config
+```
+
+Look for:
+
+```
+📂 Paths
+   • WhatsApp Media Path        /your/custom/path
+```
+
+Then run health check:
+
+```bash
+wa-transcriber health
+```
+
+Should show:
+
+```
+📂 WhatsApp Path         Detected
+   /your/custom/path
+```
+
+### Common Mistakes
+
+#### Wrong Path Format
+
+**Incorrect:**
+```json
+"MANUAL_PATH_OVERRIDE": "C:\Users\John\AppData\Local\..."
+```
+
+**Correct:**
+```json
+"MANUAL_PATH_OVERRIDE": "C:\\Users\\John\\AppData\\Local\\..."
+```
+
+#### Pointing to Wrong Folder
+
+Ensure you point to the **Media** or **transfers** folder, not the WhatsApp root:
+
+**Incorrect:**
+```
+~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/
+```
+
+**Correct:**
+```
+~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+```
+
+</Accordion>
+
+## Troubleshooting Detection Failures
+
+<Accordion title="Path detection failed" icon="triangle-exclamation">
+
+### Diagnosis
+
+Run the health check:
+
+```bash
+wa-transcriber health
+```
+
+If path detection failed, you'll see:
+
+```
+📂 WhatsApp Path         NOT FOUND
+   ➜ Fix: Open config.json and set MANUAL_PATH_OVERRIDE
+   (Make sure you have installed the WhatsApp Store Version)
+```
+
+From health.py:266-285.
+
+### Step-by-Step Resolution
+
+#### Step 1: Verify WhatsApp Desktop Installation
+
+Ensure WhatsApp Desktop is installed and working:
+
+1. Open WhatsApp Desktop
+2. Send yourself a voice note
+3. Note where it gets saved
+
+#### Step 2: Locate Media Folder Manually
+
+**macOS:**
+```bash
+open ~/Library/Group\ Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+```
+
+**Windows (File Explorer):**
+```
+%LOCALAPPDATA%\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers
+```
+
+#### Step 3: Check for .opus Files
+
+The folder should contain `.opus` files (voice notes):
+
+```bash
+# macOS/Linux
+find ~/Library/Group\ Containers/group.net.whatsapp.WhatsApp.shared/Message/Media -name "*.opus"
+
+# Windows (PowerShell)
+Get-ChildItem -Path "$env:LOCALAPPDATA\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers" -Filter *.opus -Recurse
+```
+
+#### Step 4: Set Manual Override
+
+If files are found, set the path manually:
+
+```bash
+wa-transcriber setup
+```
+
+Select "Manually specify path" and enter the full path.
+
+#### Step 5: Verify
+
+Confirm the path is now detected:
+
+```bash
+wa-transcriber health
+```
+
+Should show:
+
+```
+📂 WhatsApp Path         Detected
+   /your/path/to/media
+```
+
+</Accordion>
+
+<Accordion title="Path exists but files not detected" icon="file-magnifying-glass">
+
+### Problem
+
+The health check shows path is detected, but new voice notes are not being transcribed.
+
+### Possible Causes
+
+#### 1. Wrong Subfolder
+
+WhatsApp may store media in subfolders. The transcriber searches recursively, but ensure you're pointing to the correct parent folder.
+
+**Check structure:**
+
+```bash
+# macOS
+tree ~/Library/Group\ Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+
+# Windows (PowerShell with tree command)
+tree /F "%LOCALAPPDATA%\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers"
+```
+
+#### 2. Auto-Download Disabled
+
+See the [Script doesn't trigger](/troubleshooting/common-issues#script-doesnt-trigger-on-new-voice-notes) section in Common Issues.
+
+#### 3. File Extensions
+
+From monitor.py, the transcriber only processes:
+- `.opus` (primary format)
+- `.m4a`
+- `.mp3`
+- `.wav`
+
+If WhatsApp uses a different format on your system, it won't be detected.
+
+**Check file extensions:**
+
+```bash
+# macOS/Linux
+find /path/to/media -type f -name "*" | grep -o '\.[^.]*$' | sort -u
+
+# Windows (PowerShell)
+Get-ChildItem -Path "path\to\media" -Recurse -File | Select-Object Extension -Unique
+```
+
+#### 4. Permissions
+
+The transcriber may not have read permissions.
+
+**Test:**
+
+```bash
+# macOS/Linux
+ls -la /path/to/media
+
+# Windows (PowerShell)
+Get-Acl "path\to\media" | Format-List
+```
+
+See [Permission denied errors](/troubleshooting/common-issues#permission-denied-errors) in Common Issues.
+
+</Accordion>
+
+## Verification Steps
+
+Use this checklist to verify path detection:
+
+1. **Check WhatsApp Desktop is Store version:**
+   - macOS: Installed from Mac App Store
+   - Windows: Installed from Microsoft Store
+
+2. **Verify path exists:**
+   ```bash
+   wa-transcriber config
+   ```
+
+3. **Run health check:**
+   ```bash
+   wa-transcriber health
+   ```
+
+4. **Check for .opus files:**
+   - Send yourself a test voice note
+   - Verify it appears in the Media folder
+
+5. **Test transcription:**
+   ```bash
+   wa-transcriber
+   ```
+   - Send a voice note
+   - Watch for processing output
+
+## Advanced Debugging
+
+<Accordion title="Debugging path detection code" icon="code">
+
+### Manual Testing
+
+You can test path detection logic manually:
+
+```python
+from pathlib import Path
+import os
+import platform
+
+HOME_DIR = Path.home()
+SYSTEM = platform.system()
+
+if SYSTEM == "Darwin":
+    mac_store = HOME_DIR / "Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media"
+    mac_direct = HOME_DIR / "Library/Application Support/WhatsApp/Media"
+    
+    print(f"Store path exists: {mac_store.exists()}")
+    print(f"Store path: {mac_store}")
+    print(f"\nDirect path exists: {mac_direct.exists()}")
+    print(f"Direct path: {mac_direct}")
+
+elif SYSTEM == "Windows":
+    local_app_data = os.getenv("LOCALAPPDATA", "")
+    win_store = os.path.join(local_app_data, "Packages", "5319275A.WhatsAppDesktop_cv1g1gvanyjgm", "LocalState", "shared", "transfers")
+    win_legacy = os.path.join(local_app_data, "WhatsApp", "Media")
+    
+    print(f"Store path exists: {os.path.exists(win_store)}")
+    print(f"Store path: {win_store}")
+    print(f"\nLegacy path exists: {os.path.exists(win_legacy)}")
+    print(f"Legacy path: {win_legacy}")
+```
+
+Save as `test_path.py` and run:
+
+```bash
+python test_path.py
+```
+
+### Check Config Loading
+
+Verify your manual override is being loaded:
+
+```python
+import json
+from pathlib import Path
+
+config_path = Path.home() / ".wa-transcriber" / "config.json"
+
+with open(config_path) as f:
+    config = json.load(f)
+    
+print(f"MANUAL_PATH_OVERRIDE: {config.get('MANUAL_PATH_OVERRIDE')}")
+```
+
+</Accordion>
+
+## Need Help?
+
+If you're still unable to configure the WhatsApp path:
+
+1. Collect diagnostic information:
+   ```bash
+   wa-transcriber health > health_output.txt
+   wa-transcriber config > config_output.txt
+   ```
+
+2. Note your:
+   - Operating system and version
+   - WhatsApp Desktop version
+   - Installation source (Store vs Direct)
+
+3. Report the issue at [github.com/jpxoi/wa-transcriber/issues](https://github.com/jpxoi/wa-transcriber/issues)

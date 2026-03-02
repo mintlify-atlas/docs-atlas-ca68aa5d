@@ -1,0 +1,456 @@
+---
+title: Performance Troubleshooting
+description: Optimize transcription speed and resolve performance issues
+---
+
+This page helps you diagnose and resolve performance problems with WhatsApp Auto-Transcriber.
+
+## Understanding Transcription Speed
+
+Transcription performance depends on three primary factors:
+
+1. **Model Size** - Larger models are more accurate but slower
+2. **Hardware Acceleration** - GPU/NPU processing is significantly faster than CPU
+3. **Audio Duration** - Longer voice notes take more time to process
+
+### Expected Performance
+
+Typical transcription speeds (for a 60-second voice note):
+
+| Hardware | Model | Expected Time |
+|----------|-------|---------------|
+| M1/M2 Mac (MPS) | `turbo` | 3-5 seconds |
+| M1/M2 Mac (MPS) | `large-v3` | 10-15 seconds |
+| RTX 3060 (CUDA) | `turbo` | 2-4 seconds |
+| RTX 3060 (CUDA) | `large-v3` | 8-12 seconds |
+| Modern CPU | `turbo` | 30-60 seconds |
+| Modern CPU | `large-v3` | 90-180 seconds |
+
+## Diagnosing Performance Issues
+
+<Accordion title="Check hardware acceleration status" icon="gauge">
+
+### Run System Health Check
+
+The health check tool shows exactly what hardware is being used:
+
+```bash
+wa-transcriber health
+```
+
+### Interpreting Results
+
+#### GPU Acceleration Active (Good)
+
+```
+🚀 Accelerator           Active (NVIDIA GeForce RTX 3060)
+```
+
+or
+
+```
+🚀 Accelerator           Active (Apple M2 Pro)
+```
+
+This means you're using hardware acceleration.
+
+#### CPU Fallback (Slow)
+
+```
+Accelerator              None (Running on CPU - expects slower performance)
+```
+
+This means transcription will be significantly slower.
+
+### Solutions for CPU Fallback
+
+#### macOS Users
+
+Ensure you have PyTorch with MPS support:
+
+```bash
+pip install --upgrade torch torchvision torchaudio
+```
+
+Verify MPS is available:
+
+```python
+python -c "import torch; print(torch.backends.mps.is_available())"
+```
+
+Should output `True` on M1/M2/M3/M4 Macs.
+
+#### Windows Users (NVIDIA)
+
+Install CUDA-enabled PyTorch:
+
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
+Verify CUDA is available:
+
+```python
+python -c "import torch; print(torch.cuda.is_available())"
+```
+
+Should output `True` if NVIDIA drivers are properly installed.
+
+</Accordion>
+
+<Accordion title="Slow transcription with GPU" icon="hourglass">
+
+### Problem
+
+You have GPU acceleration enabled, but transcription is still slow.
+
+### Possible Causes
+
+#### 1. Model Too Large for Your Hardware
+
+Run the health check:
+
+```bash
+wa-transcriber health
+```
+
+Look for messages like:
+
+```
+ADVICE: You are using 'large'.
+'turbo' is significantly faster and uses less RAM.
+```
+
+The system may be swapping to disk if the model doesn't fit comfortably in VRAM.
+
+**Solution:** Switch to the recommended model:
+
+```bash
+wa-transcriber setup
+```
+
+#### 2. Thermal Throttling
+
+On laptops, sustained workloads can cause thermal throttling.
+
+**Check:**
+- Monitor system temperature during transcription
+- Ensure adequate ventilation
+- Use a laptop cooling pad
+
+#### 3. Background GPU Usage
+
+Other applications may be consuming GPU resources.
+
+**Check GPU usage:**
+
+```bash
+# NVIDIA
+nvidia-smi
+
+# macOS
+sudo powermetrics --samplers gpu_power -i 1000
+```
+
+**Solution:** Close GPU-intensive applications before running the transcriber.
+
+</Accordion>
+
+## Model Selection Guide
+
+<Accordion title="Choosing the right model size" icon="sliders">
+
+### Model Comparison
+
+From the source code (health.py:27-34):
+
+```python
+MODEL_REQUIREMENTS: Dict[str, float] = {
+    "large": 10.0,
+    "turbo": 6.0,
+    "medium": 5.0,
+    "small": 2.0,
+    "base": 1.0,
+    "tiny": 1.0,
+}
+```
+
+### Speed vs Accuracy Tradeoffs
+
+| Model | Memory | Speed | Accuracy | Best For |
+|-------|--------|-------|----------|-----------|
+| `tiny` | 1 GB | Fastest | Low | Testing, older hardware |
+| `base` | 1 GB | Very Fast | Decent | Quick snippets, short notes |
+| `small` | 2 GB | Fast | Good | Daily use on modest hardware |
+| `medium` | 5 GB | Balanced | Great | Professional use |
+| `turbo` | 6 GB | **Optimized** | **Excellent** | **Recommended for M1/M2 & RTX 3060+** |
+| `large-v3` | 10 GB | Slowest | Perfect | Heavy accents, noisy audio |
+
+### When to Use Each Model
+
+#### Use `tiny` or `base` if:
+- You have less than 4GB RAM/VRAM
+- Speed is more important than accuracy
+- Processing simple English with clear audio
+
+#### Use `small` if:
+- You have 4-8GB RAM/VRAM
+- You need good accuracy with decent speed
+- General daily use
+
+#### Use `turbo` if (Recommended):
+- You have 8GB+ RAM/VRAM
+- You have M1/M2/M3 Mac or RTX 3060+
+- You want the best speed/accuracy balance
+
+#### Use `large-v3` if:
+- You have 12GB+ RAM/VRAM
+- Accuracy is critical
+- Processing heavy accents or noisy environments
+- Speed is not a concern
+
+### Switching Models
+
+Use the setup wizard:
+
+```bash
+wa-transcriber setup
+```
+
+Or manually edit `~/.wa-transcriber/config.json`:
+
+```json
+{
+  "MODEL_SIZE": "turbo"
+}
+```
+
+</Accordion>
+
+## Memory Management
+
+<Accordion title="Optimizing memory usage" icon="memory">
+
+### Understanding Memory Limits
+
+From config.py:78-79, the transcriber uses:
+
+- **System RAM:** 50% limit (configurable via `SYSTEM_MEMORY_LIMIT_FACTOR`)
+- **NVIDIA VRAM:** 70% limit (configurable via `NVIDIA_VRAM_LIMIT_FACTOR`)
+
+These limits leave headroom for the OS and other applications.
+
+### Adjusting Memory Limits
+
+Edit `~/.wa-transcriber/config.json`:
+
+```json
+{
+  "SYSTEM_MEMORY_LIMIT_FACTOR": 0.5,    // 50% of system RAM
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.7       // 70% of GPU VRAM
+}
+```
+
+### When to Adjust
+
+#### Increase limits if:
+- You have plenty of free memory
+- Only running the transcriber
+- Want to use a larger model
+
+**Example:** Set to `0.8` for 80% usage
+
+```json
+{
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.8
+}
+```
+
+#### Decrease limits if:
+- You frequently run out of memory
+- Running many applications simultaneously
+- Experiencing system freezes
+
+**Example:** Set to `0.4` for 40% usage
+
+```json
+{
+  "SYSTEM_MEMORY_LIMIT_FACTOR": 0.4
+}
+```
+
+### Check Current Memory Usage
+
+The health check calculates safe memory allowance:
+
+```bash
+wa-transcriber health
+```
+
+Output:
+
+```
+💾 Memory Rule            70% of VRAM (8.0GB)
+   Safe Allowance:        5.6 GB
+
+ Optimization Analysis:
+ Recommended (turbo): [████████████████····] 75% (Leaves ~1.4 GB Headroom)
+```
+
+This shows:
+- Total VRAM: 8.0 GB
+- Safe allowance: 5.6 GB (70%)
+- Turbo model uses: 75% of allowance
+- Headroom: 1.4 GB remaining
+
+</Accordion>
+
+<Accordion title="File ready timeout issues" icon="clock">
+
+### Problem
+
+You see timeout errors:
+
+```
+✗ [TIMEOUT] File not ready: audio_file.opus
+```
+
+### Cause
+
+From transcriber.py:154-180, the transcriber waits for files to finish downloading by monitoring file size changes. The default timeout is 10 seconds.
+
+This can happen with:
+- Slow network connections
+- Large voice note files
+- Network storage/cloud synced folders
+
+### Solution
+
+Increase the file ready timeout in `~/.wa-transcriber/config.json`:
+
+```json
+{
+  "FILE_READY_TIMEOUT": 30  // Increase from default 10 seconds
+}
+```
+
+Recommended values:
+- Fast internet: 10 seconds (default)
+- Moderate internet: 20-30 seconds
+- Slow internet or large files: 60 seconds
+
+</Accordion>
+
+## Advanced Optimization
+
+<Accordion title="Apple MPS FP16 acceleration" icon="apple">
+
+### What is FP16?
+
+FP16 (16-bit floating point) is a lower-precision format that can speed up processing on compatible hardware.
+
+### Enabling MPS FP16
+
+From config.py:77 and transcriber.py:124-125, MPS FP16 is disabled by default for compatibility.
+
+**Enable it in** `~/.wa-transcriber/config.json`:
+
+```json
+{
+  "ENABLE_MPS_FP16": true
+}
+```
+
+### When to Enable
+
+- You have an M1 Pro/Max/Ultra or M2/M3/M4 Mac
+- Running macOS 13.0+ with PyTorch 2.0+
+- Want maximum speed
+
+### When NOT to Enable
+
+- Base M1 or earlier Macs
+- Experiencing crashes or NaN errors
+- Accuracy is more important than speed
+
+### Performance Gain
+
+Expect 10-30% faster transcription with minimal accuracy impact.
+
+</Accordion>
+
+<Accordion title="Model cleanup" icon="trash">
+
+### Automatic Cleanup
+
+From config.py:75-76, the transcriber automatically deletes unused models after 3 days by default.
+
+This saves disk space (~1-10GB per model) when switching between models.
+
+### Configuration
+
+Edit `~/.wa-transcriber/config.json`:
+
+```json
+{
+  "MODEL_CLEANUP_ENABLED": true,
+  "MODEL_RETENTION_DAYS": 3
+}
+```
+
+### Disable Cleanup
+
+If you switch models frequently:
+
+```json
+{
+  "MODEL_CLEANUP_ENABLED": false
+}
+```
+
+### Manual Cleanup
+
+Models are stored in:
+
+```bash
+~/.cache/whisper/
+```
+
+To manually delete:
+
+```bash
+rm -rf ~/.cache/whisper/*.pt
+```
+
+The transcriber will re-download models as needed.
+
+</Accordion>
+
+## Performance Checklist
+
+Use this checklist to ensure optimal performance:
+
+- [ ] Run `wa-transcriber health` to verify GPU acceleration
+- [ ] Use the recommended model size for your hardware
+- [ ] Ensure no other GPU-intensive applications are running
+- [ ] Close unnecessary background processes
+- [ ] Check that memory limits are appropriate
+- [ ] Verify adequate disk space for model storage
+- [ ] Consider enabling MPS FP16 on M1/M2 Macs
+- [ ] Monitor system temperature during use
+
+## Still Having Issues?
+
+If performance remains poor after optimization:
+
+1. Check application logs:
+   ```bash
+   wa-transcriber logs app
+   ```
+
+2. Share your health check output:
+   ```bash
+   wa-transcriber health
+   ```
+
+3. Report at [github.com/jpxoi/wa-transcriber/issues](https://github.com/jpxoi/wa-transcriber/issues)

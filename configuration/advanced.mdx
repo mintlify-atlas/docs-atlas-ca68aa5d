@@ -1,0 +1,488 @@
+---
+title: Advanced Configuration
+description: Fine-tune lookback scanning, model cleanup, language settings, and paths
+---
+
+WhatsApp Auto-Transcriber provides several advanced configuration options for power users who want precise control over the transcription behavior.
+
+## Startup Scan Configuration
+
+### Lookback Scanning
+
+When the transcriber starts, it can scan for voice notes that may have been missed while it wasn't running.
+
+<ParamField path="SCAN_LOOKBACK_ENABLED" type="boolean" default="true">
+  Enable scanning for missed voice notes on startup.
+  
+  When enabled, the application will scan the WhatsApp Media folder for `.opus` files modified within the lookback period.
+</ParamField>
+
+<ParamField path="SCAN_LOOKBACK_HOURS" type="integer" default="1">
+  Number of hours to look back when scanning for missed files.
+  
+  Only applies when `SCAN_LOOKBACK_ENABLED` is `true`.
+  
+  **Range:** 1-24 hours recommended
+</ParamField>
+
+### Configuration Examples
+
+**Default (1 hour lookback):**
+```json
+{
+  "SCAN_LOOKBACK_ENABLED": true,
+  "SCAN_LOOKBACK_HOURS": 1
+}
+```
+
+**Extended lookback for infrequent use:**
+```json
+{
+  "SCAN_LOOKBACK_ENABLED": true,
+  "SCAN_LOOKBACK_HOURS": 12
+}
+```
+
+**Disable lookback (fastest startup):**
+```json
+{
+  "SCAN_LOOKBACK_ENABLED": false
+}
+```
+
+### Use Cases
+
+#### Daily Users
+If you run the transcriber continuously or daily:
+```json
+{
+  "SCAN_LOOKBACK_ENABLED": true,
+  "SCAN_LOOKBACK_HOURS": 1
+}
+```
+
+#### Occasional Users
+If you run the transcriber a few times per week:
+```json
+{
+  "SCAN_LOOKBACK_ENABLED": true,
+  "SCAN_LOOKBACK_HOURS": 6
+}
+```
+
+#### Performance-Critical Systems
+If startup speed is critical and you don't care about missed files:
+```json
+{
+  "SCAN_LOOKBACK_ENABLED": false
+}
+```
+
+<Tip>
+  Setting `SCAN_LOOKBACK_HOURS` too high (24+) may slow down startup on systems with many voice notes.
+</Tip>
+
+## Model Cleanup Configuration
+
+Whisper models are downloaded to `~/.cache/whisper/` and can consume significant disk space (1-10 GB per model). Automatic cleanup helps manage this.
+
+<ParamField path="MODEL_CLEANUP_ENABLED" type="boolean" default="true">
+  Enable automatic cleanup of unused Whisper models.
+  
+  When enabled, the application will delete model files that haven't been accessed recently.
+</ParamField>
+
+<ParamField path="MODEL_RETENTION_DAYS" type="integer" default="3">
+  Number of days to retain unused models before deletion.
+  
+  Only applies when `MODEL_CLEANUP_ENABLED` is `true`.
+  
+  **Range:** 1-30 days recommended
+</ParamField>
+
+### Configuration Examples
+
+**Default (3-day retention):**
+```json
+{
+  "MODEL_CLEANUP_ENABLED": true,
+  "MODEL_RETENTION_DAYS": 3
+}
+```
+
+**Aggressive cleanup (save disk space):**
+```json
+{
+  "MODEL_CLEANUP_ENABLED": true,
+  "MODEL_RETENTION_DAYS": 1
+}
+```
+
+**Conservative cleanup (avoid re-downloads):**
+```json
+{
+  "MODEL_CLEANUP_ENABLED": true,
+  "MODEL_RETENTION_DAYS": 14
+}
+```
+
+**Disable cleanup (keep all models):**
+```json
+{
+  "MODEL_CLEANUP_ENABLED": false
+}
+```
+
+### How Cleanup Works
+
+1. On startup, the application checks all `.pt` files in `~/.cache/whisper/`
+2. For each file, it checks the last access time
+3. If the file hasn't been accessed in `MODEL_RETENTION_DAYS`, it's deleted
+4. The current model in use is never deleted
+
+### Disk Space Considerations
+
+| Model | Disk Space |
+| --- | --- |
+| `tiny` | ~75 MB |
+| `base` | ~150 MB |
+| `small` | ~500 MB |
+| `medium` | ~1.5 GB |
+| `turbo` | ~1.6 GB |
+| `large-v3` | ~3 GB |
+
+**Example:** If you've tried all 6 models, they consume ~7.3 GB total.
+
+<Warning>
+  Deleted models will be re-downloaded automatically when needed, which may take several minutes on slower connections.
+</Warning>
+
+## Language Configuration
+
+<ParamField path="TRANSCRIPTION_LANGUAGE" type="string | null" default="null">
+  ISO 639-1 language code for transcription.
+  
+  When set to `null`, Whisper will automatically detect the language. Setting a specific language can improve accuracy and speed.
+</ParamField>
+
+### Auto-Detection (Default)
+
+```json
+{
+  "TRANSCRIPTION_LANGUAGE": null
+}
+```
+
+Whisper will automatically detect the language in each voice note. This is ideal for multilingual users.
+
+**Pros:**
+- Works with any language
+- No configuration needed
+- Handles mixed-language conversations
+
+**Cons:**
+- Slightly slower (adds ~0.5-1s per transcription)
+- May misidentify language on very short clips
+
+### Fixed Language
+
+```json
+{
+  "TRANSCRIPTION_LANGUAGE": "en"
+}
+```
+
+**Pros:**
+- Faster transcription
+- More accurate for the specified language
+- Prevents misidentification
+
+**Cons:**
+- Will fail on other languages
+- Requires manual change for different languages
+
+### Supported Languages
+
+Whisper supports 99 languages. Common examples:
+
+| Language | Code |
+| --- | --- |
+| English | `en` |
+| Spanish | `es` |
+| French | `fr` |
+| German | `de` |
+| Italian | `it` |
+| Portuguese | `pt` |
+| Dutch | `nl` |
+| Russian | `ru` |
+| Chinese | `zh` |
+| Japanese | `ja` |
+| Korean | `ko` |
+| Arabic | `ar` |
+| Hindi | `hi` |
+
+For a complete list, see [Whisper's language support](https://github.com/openai/whisper#available-models-and-languages).
+
+### English-Only Models
+
+For English-only transcription, you can use optimized English models:
+
+```json
+{
+  "MODEL_SIZE": "small.en",
+  "TRANSCRIPTION_LANGUAGE": "en"
+}
+```
+
+Available English-only models:
+- `tiny.en.pt`
+- `base.en.pt`
+- `small.en.pt`
+- `medium.en.pt`
+
+<Tip>
+  English-only models are ~10-15% faster than multilingual models for English content.
+</Tip>
+
+## File Handling Configuration
+
+<ParamField path="FILE_READY_TIMEOUT" type="integer" default="10">
+  Number of seconds to wait for a file to be fully written before processing.
+  
+  WhatsApp writes voice notes in chunks. This timeout ensures the file is complete before transcription begins.
+  
+  **Range:** 5-30 seconds recommended
+</ParamField>
+
+### Configuration Examples
+
+**Default (10 seconds):**
+```json
+{
+  "FILE_READY_TIMEOUT": 10
+}
+```
+
+**Fast connections (reduce wait time):**
+```json
+{
+  "FILE_READY_TIMEOUT": 5
+}
+```
+
+**Slow connections or large files:**
+```json
+{
+  "FILE_READY_TIMEOUT": 20
+}
+```
+
+<Warning>
+  Setting `FILE_READY_TIMEOUT` too low (< 5 seconds) may cause transcription to fail on partially written files.
+</Warning>
+
+## WhatsApp Path Configuration
+
+<ParamField path="MANUAL_PATH_OVERRIDE" type="string | null" default="null">
+  Manual path to WhatsApp Media folder.
+  
+  When set to `null`, the application auto-detects the path based on your operating system.
+</ParamField>
+
+### Auto-Detection (Default)
+
+```json
+{
+  "MANUAL_PATH_OVERRIDE": null
+}
+```
+
+The application will search for WhatsApp in these locations:
+
+**macOS:**
+1. `~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media` (Store version)
+2. `~/Library/Application Support/WhatsApp/Media` (Direct download)
+
+**Windows:**
+1. `%LOCALAPPDATA%\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers` (Store version)
+2. `%LOCALAPPDATA%\WhatsApp\Media` (Legacy)
+
+### Manual Override
+
+If auto-detection fails or you use a custom WhatsApp installation:
+
+**macOS Example:**
+```json
+{
+  "MANUAL_PATH_OVERRIDE": "/Users/username/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media"
+}
+```
+
+**Windows Example:**
+```json
+{
+  "MANUAL_PATH_OVERRIDE": "C:\\Users\\username\\AppData\\Local\\Packages\\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\\LocalState\\shared\\transfers"
+}
+```
+
+<Warning>
+  On Windows, use double backslashes (`\\`) in JSON paths to escape properly.
+</Warning>
+
+### Finding Your WhatsApp Path
+
+If you need to find the path manually:
+
+1. Open WhatsApp Desktop
+2. Download a voice note
+3. Check where it's saved in your file system
+4. Use that directory as `MANUAL_PATH_OVERRIDE`
+
+## Complete Advanced Configuration Example
+
+Here's a complete configuration for a power user who:
+- Runs the transcriber occasionally
+- Wants aggressive disk space management
+- Uses English-only content
+- Has a fast internet connection
+
+```json
+{
+  "MODEL_SIZE": "small.en",
+  "TRANSCRIPTION_LANGUAGE": "en",
+  "SCAN_LOOKBACK_ENABLED": true,
+  "SCAN_LOOKBACK_HOURS": 12,
+  "MODEL_CLEANUP_ENABLED": true,
+  "MODEL_RETENTION_DAYS": 1,
+  "ENABLE_MPS_FP16": true,
+  "SYSTEM_MEMORY_LIMIT_FACTOR": 0.5,
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.7,
+  "FILE_READY_TIMEOUT": 5,
+  "MANUAL_PATH_OVERRIDE": null
+}
+```
+
+## Validation and Testing
+
+After modifying advanced settings:
+
+1. **Validate JSON syntax:**
+   Use a JSON validator or check for errors on startup
+
+2. **Run health check:**
+   ```bash
+   wa-transcriber health
+   ```
+
+3. **View configuration:**
+   ```bash
+   wa-transcriber config
+   ```
+
+4. **Test with a voice note:**
+   Send yourself a test voice note to verify everything works
+
+## Performance Tuning Tips
+
+### Fastest Startup
+```json
+{
+  "SCAN_LOOKBACK_ENABLED": false
+}
+```
+
+### Fastest Transcription
+```json
+{
+  "MODEL_SIZE": "tiny",
+  "TRANSCRIPTION_LANGUAGE": "en",
+  "ENABLE_MPS_FP16": true
+}
+```
+
+### Most Accurate
+```json
+{
+  "MODEL_SIZE": "large-v3",
+  "TRANSCRIPTION_LANGUAGE": null
+}
+```
+
+### Best Balance
+```json
+{
+  "MODEL_SIZE": "turbo",
+  "TRANSCRIPTION_LANGUAGE": null,
+  "ENABLE_MPS_FP16": true
+}
+```
+
+## Troubleshooting
+
+### Startup Scan Takes Too Long
+
+**Problem:** Application hangs during "Scanning for missed files"
+
+**Solution:**
+```json
+{
+  "SCAN_LOOKBACK_HOURS": 1
+}
+```
+or disable entirely:
+```json
+{
+  "SCAN_LOOKBACK_ENABLED": false
+}
+```
+
+### Models Keep Re-Downloading
+
+**Problem:** Same model downloads every few days
+
+**Solution:** Increase retention period:
+```json
+{
+  "MODEL_RETENTION_DAYS": 14
+}
+```
+or disable cleanup:
+```json
+{
+  "MODEL_CLEANUP_ENABLED": false
+}
+```
+
+### Wrong Language Detected
+
+**Problem:** Auto-detection picks the wrong language
+
+**Solution:** Set a fixed language:
+```json
+{
+  "TRANSCRIPTION_LANGUAGE": "en"
+}
+```
+
+### WhatsApp Path Not Found
+
+**Problem:** `wa-transcriber health` shows "WhatsApp Path NOT FOUND"
+
+**Solution:** Set manual path:
+```json
+{
+  "MANUAL_PATH_OVERRIDE": "/path/to/whatsapp/media"
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Model Selection" icon="brain" href="/configuration/models">
+    Review model options for your use case
+  </Card>
+  
+  <Card title="Hardware Settings" icon="microchip" href="/configuration/hardware">
+    Optimize memory and GPU settings
+  </Card>
+</CardGroup>

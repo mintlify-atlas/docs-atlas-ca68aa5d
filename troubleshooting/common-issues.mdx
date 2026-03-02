@@ -1,0 +1,405 @@
+---
+title: Common Issues
+description: Troubleshoot frequently encountered problems with WhatsApp Auto-Transcriber
+---
+
+This page covers the most common issues users encounter and their solutions.
+
+## Clipboard Issues
+
+<Accordion title="Clipboard unavailable" icon="clipboard">
+
+### Problem
+
+You see the warning message:
+
+```
+⚠ Clipboard unavailable
+```
+
+Transcriptions complete successfully, but text is not copied to your clipboard.
+
+### Cause
+
+The `pyperclip` library cannot access your system clipboard. This typically happens on:
+- **Linux systems** without clipboard utilities installed
+- **Headless/SSH sessions** without display access
+- **Permission issues** on some systems
+
+### Solution
+
+#### On Linux
+
+Install clipboard utilities:
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install xclip
+
+# Fedora/RHEL
+sudo dnf install xclip
+
+# Arch
+sudo pacman -S xclip
+```
+
+Alternatively, use `xsel`:
+
+```bash
+sudo apt-get install xsel  # Debian/Ubuntu
+```
+
+#### On macOS/Windows
+
+Clipboard access should work by default. If you encounter this issue:
+
+1. Verify Python has accessibility permissions (macOS System Preferences > Security & Privacy > Privacy > Accessibility)
+2. Reinstall pyperclip:
+   ```bash
+   pip install --force-reinstall pyperclip
+   ```
+
+### Note
+
+Transcripts are **always saved to logs** regardless of clipboard status. You can access them via:
+
+```bash
+wa-transcriber logs audio
+```
+
+</Accordion>
+
+## Memory Issues
+
+<Accordion title="CUDA out of memory" icon="memory">
+
+### Problem
+
+You see an error like:
+
+```
+✗ Failed to load on cuda: CUDA out of memory
+```
+
+Or the transcriber crashes during processing.
+
+### Cause
+
+The selected Whisper model is too large for your available GPU VRAM. This commonly occurs when:
+- Using `large-v3` or `turbo` models on GPUs with less than 8GB VRAM
+- Other applications are using GPU memory
+- Multiple models are loaded simultaneously
+
+### Diagnosis
+
+Run the health check to see recommended settings:
+
+```bash
+wa-transcriber health
+```
+
+Look for output like:
+
+```
+CRITICAL: 'large-v3' is too large for your system.
+It requires ~10GB, but you only have 6.0GB safe.
+➜ Switch to 'turbo' in config.json
+```
+
+### Solution
+
+#### Option 1: Switch to a Smaller Model (Recommended)
+
+Run the setup wizard and select a smaller model:
+
+```bash
+wa-transcriber setup
+```
+
+Model memory requirements:
+- `tiny` - 1 GB
+- `base` - 1 GB  
+- `small` - 2 GB
+- `medium` - 5 GB
+- `turbo` - 6 GB
+- `large-v3` - 10 GB
+
+#### Option 2: Adjust Memory Limits
+
+Edit `~/.wa-transcriber/config.json` and reduce VRAM usage:
+
+```json
+{
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.6  // Reduce from default 0.7
+}
+```
+
+Then restart the transcriber.
+
+#### Option 3: Close Other GPU Applications
+
+Free up VRAM by closing:
+- Video editing software
+- Games
+- Machine learning applications
+- Multiple browser windows (if hardware accelerated)
+
+</Accordion>
+
+## Transcription Not Triggering
+
+<Accordion title="Script doesn't trigger on new voice notes" icon="play">
+
+### Problem
+
+The transcriber is running and shows "Watching Folder", but new voice notes are not being processed.
+
+### Cause
+
+WhatsApp's **Media Auto-Download** is disabled, so voice notes are not being saved to the local file system until you manually download them.
+
+### Solution
+
+#### Enable Auto-Download in WhatsApp Desktop
+
+1. Open WhatsApp Desktop
+2. Click **Settings** (gear icon)
+3. Go to **Storage and Data**
+4. Under **Media Auto-Download**, ensure **Audio** is enabled
+5. Restart WhatsApp Desktop
+
+#### Manual Download
+
+If you prefer not to enable auto-download:
+
+1. Click the **download arrow** on each voice note
+2. Once downloaded, the transcriber will process it automatically
+
+### Verification
+
+Send yourself a test voice note and watch the console output. You should see:
+
+```
+⚡️ [WORKING] Processing: audio_file.opus (5s)
+✓ [DONE in 1.2s] Transcript: Hello world...
+```
+
+</Accordion>
+
+## FFmpeg Issues
+
+<Accordion title="FFmpeg not found" icon="terminal">
+
+### Problem
+
+You see errors like:
+
+```
+✗ FFmpeg                 MISSING
+```
+
+Or:
+
+```
+RuntimeError: ffmpeg was not found
+```
+
+### Cause
+
+FFmpeg is required by Whisper for audio processing but is not installed or not in your system PATH.
+
+### Solution
+
+#### macOS
+
+Install via Homebrew:
+
+```bash
+brew install ffmpeg
+```
+
+#### Windows
+
+Option 1 - Chocolatey (recommended):
+
+```powershell
+choco install ffmpeg
+```
+
+Option 2 - Manual installation:
+
+1. Download from [ffmpeg.org](https://ffmpeg.org/download.html)
+2. Extract to `C:\ffmpeg`
+3. Add `C:\ffmpeg\bin` to your system PATH:
+   - Open System Properties > Environment Variables
+   - Edit `Path` under System Variables
+   - Add new entry: `C:\ffmpeg\bin`
+4. Restart your terminal
+
+#### Linux
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install ffmpeg
+
+# Fedora/RHEL
+sudo dnf install ffmpeg
+
+# Arch
+sudo pacman -S ffmpeg
+```
+
+### Verification
+
+Confirm installation:
+
+```bash
+ffmpeg -version
+```
+
+Then run:
+
+```bash
+wa-transcriber health
+```
+
+You should see:
+
+```
+✓ FFmpeg                Found (/usr/local/bin/ffmpeg)
+```
+
+</Accordion>
+
+## Python Dependency Issues
+
+<Accordion title="Missing Python libraries" icon="python">
+
+### Problem
+
+You see import errors or the health check shows missing libraries:
+
+```
+✗ torch                  MISSING
+✗ whisper                MISSING
+```
+
+### Cause
+
+Required Python packages are not installed in your environment.
+
+### Solution
+
+#### Reinstall the Package
+
+The recommended approach:
+
+```bash
+cd wa-transcriber
+pip install .
+```
+
+This installs all dependencies automatically.
+
+#### Manual Installation
+
+If you need to install dependencies individually:
+
+```bash
+pip install torch whisper watchdog pyperclip questionary colorama typer tqdm
+```
+
+#### Virtual Environment Issues
+
+If you installed in a virtual environment, ensure it's activated:
+
+```bash
+# macOS/Linux
+source venv/bin/activate
+
+# Windows
+venv\Scripts\activate
+```
+
+### Verification
+
+Run the health check:
+
+```bash
+wa-transcriber health
+```
+
+All Python libraries should show as "Installed".
+
+</Accordion>
+
+## File Permission Issues
+
+<Accordion title="Permission denied errors" icon="lock">
+
+### Problem
+
+You see errors like:
+
+```
+OSError: Permission denied
+```
+
+Or the transcriber cannot access WhatsApp files.
+
+### Solution
+
+#### macOS - Grant Full Disk Access
+
+1. Open **System Preferences** > **Security & Privacy** > **Privacy**
+2. Select **Full Disk Access**
+3. Click the lock to make changes
+4. Click **+** and add your terminal application (Terminal.app or iTerm)
+5. Restart your terminal
+
+#### Windows - Run as Administrator
+
+If WhatsApp is installed from the Microsoft Store:
+
+1. Right-click Command Prompt or PowerShell
+2. Select **Run as Administrator**
+3. Navigate to your project directory
+4. Run `wa-transcriber`
+
+#### Check File Permissions
+
+Verify the WhatsApp Media folder is readable:
+
+```bash
+# macOS/Linux
+ls -la ~/Library/Group\ Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+
+# Windows (PowerShell)
+Get-Acl "$env:LOCALAPPDATA\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers"
+```
+
+</Accordion>
+
+## Getting Help
+
+If you're still experiencing issues:
+
+1. Run full diagnostics:
+   ```bash
+   wa-transcriber health
+   ```
+
+2. Check application logs:
+   ```bash
+   wa-transcriber logs app
+   ```
+
+3. Review your configuration:
+   ```bash
+   wa-transcriber config
+   ```
+
+4. Report the issue at [github.com/jpxoi/wa-transcriber/issues](https://github.com/jpxoi/wa-transcriber/issues) with:
+   - Your OS and version
+   - Output from `wa-transcriber health`
+   - Relevant error messages

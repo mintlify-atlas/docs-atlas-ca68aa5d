@@ -1,0 +1,433 @@
+---
+title: 'health.py'
+description: 'System diagnostics and model recommendation engine'
+---
+
+## Overview
+
+The `health.py` module provides comprehensive system health checks, hardware capability detection, and intelligent Whisper model recommendations based on available memory.
+
+**Location:** `app/health.py`
+
+## Constants
+
+### MODEL_REQUIREMENTS
+
+Dictionary mapping Whisper models to their approximate memory requirements in GB.
+
+```python
+MODEL_REQUIREMENTS: Dict[str, float] = {
+    "large": 10.0,
+    "turbo": 6.0,
+    "medium": 5.0,
+    "small": 2.0,
+    "base": 1.0,
+    "tiny": 1.0,
+}
+```
+
+**Usage:**
+
+```python
+from app.health import MODEL_REQUIREMENTS
+
+required_gb = MODEL_REQUIREMENTS["turbo"]  # 6.0
+print(f"Turbo model needs ~{required_gb}GB")
+```
+
+---
+
+## Functions
+
+### run_diagnostics()
+
+Runs a complete system health check and displays recommendations.
+
+```python
+def run_diagnostics() -> None
+```
+
+**Checks Performed:**
+
+1. **Hardware Acceleration** - Detects CUDA/MPS/CPU
+2. **Memory Analysis** - Calculates safe memory limits and recommends optimal model
+3. **System Dependencies** - Verifies FFmpeg installation
+4. **Python Libraries** - Checks all required packages
+5. **Configuration Paths** - Validates WhatsApp Media folder
+
+**Example:**
+
+```bash
+wa-transcriber health
+```
+
+**Example Output:**
+
+```
+🏥 Running System Health Check...
+
+--- Hardware Check ---
+ 🚀 Accelerator          Active (NVIDIA GeForce RTX 3080)
+
+ 💾 Memory Rule          70% of VRAM (10.0GB)
+     Safe Allowance:      7.0 GB
+
+   Optimization Analysis:
+   Recommended (turbo): [■■■■■■■■■■■■■■■·····] 86% (Leaves ~1.0 GB Headroom)
+
+   Result:
+   We suggest:          'turbo'
+   Your Config:         'small'
+
+   OPTIMIZATION: Your hardware is under-utilized.
+      You use 'small', but can handle 'turbo'.
+      ➜ Switch to 'turbo' in config.json for better accuracy.
+
+--- System Dependencies ---
+ ✓ FFmpeg              Found (/usr/local/bin/ffmpeg)
+
+--- Python Libraries ---
+ ✓ torch               Installed
+ ✓ whisper             Installed
+ ✓ watchdog            Installed
+ ✓ pyperclip           Installed
+ ✓ questionary         Installed
+ ✓ colorama            Installed
+ ✓ typer               Installed
+ ✓ tqdm                Installed
+
+--- Configuration ---
+ 📂 WhatsApp Path       Detected
+    ~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+
+─────────────────────────────────────────────────
+✓ System is ready! You can run 'wa-transcriber' now.
+```
+
+**Exit Behavior:**
+
+- Exits with code `0` if all checks pass
+- Exits with code `1` if critical issues found (missing dependencies or WhatsApp path)
+
+---
+
+### suggest_model(total_gb, mem_type)
+
+Calculates the optimal Whisper model based on available memory and safety rules.
+
+```python
+def suggest_model(
+    total_gb: Optional[float],
+    mem_type: Optional[str]
+) -> tuple[str, float, str, float]
+```
+
+<ParamField path="total_gb" type="float | None" required>
+  Total available memory in gigabytes.
+</ParamField>
+
+<ParamField path="mem_type" type="Literal['vram', 'unified', 'system', None]" required>
+  Type of memory: `'vram'` for NVIDIA, `'unified'` for Apple Silicon, `'system'` for CPU, or `None`.
+</ParamField>
+
+<ResponseField name="return" type="tuple[str, float, str, float]">
+  Returns a tuple of:
+  - `model_name` (str) - Recommended model (e.g., "turbo")
+  - `usable_gb` (float) - Safe memory allowance
+  - `rule_desc` (str) - Human-readable rule description
+  - `usage_pct` (float) - Percentage of usable memory the model will use
+</ResponseField>
+
+**Example:**
+
+```python
+from app.health import suggest_model
+
+# NVIDIA GPU with 10GB VRAM
+model, usable, rule, pct = suggest_model(10.0, "vram")
+print(f"Model: {model}")        # "turbo"
+print(f"Usable: {usable:.1f}GB")  # 7.0GB
+print(f"Rule: {rule}")          # "70% of VRAM (10.0GB)"
+print(f"Usage: {pct:.0f}%")     # 86%
+
+# Mac with 16GB unified memory
+model, usable, rule, pct = suggest_model(16.0, "unified")
+print(f"Model: {model}")        # "turbo"
+print(f"Usable: {usable:.1f}GB")  # 8.0GB
+```
+
+**Safety Rules:**
+
+#### NVIDIA VRAM (`mem_type="vram"`)
+
+```python
+min_free_vram = 2.0  # Leave 2GB for display/OS
+usable_gb = min(
+    total_gb * config.NVIDIA_VRAM_LIMIT_FACTOR,  # 70%
+    max(0, total_gb - min_free_vram)
+)
+```
+
+#### System/Unified RAM
+
+```python
+usable_gb = total_gb * config.SYSTEM_MEMORY_LIMIT_FACTOR  # 50%
+```
+
+**Selection Algorithm:**
+
+```python
+sorted_models = sorted(MODEL_REQUIREMENTS.items(), key=lambda x: x[1], reverse=True)
+rec_model = "tiny"  # Default fallback
+
+for name, size in sorted_models:
+    if usable_gb > 0 and (size / usable_gb) <= 0.7:
+        rec_model = name
+        break
+
+usage_pct = (MODEL_REQUIREMENTS[rec_model] / usable_gb * 100) if usable_gb > 0 else 100
+```
+
+**Model Selection Examples:**
+
+| Usable Memory | Selected Model | Reasoning |
+|---------------|----------------|----------|
+| 0.8 GB | `tiny` | Only fits smallest model |
+| 3.0 GB | `small` | 2GB / 3GB = 67% (under 70% threshold) |
+| 8.0 GB | `turbo` | 6GB / 8GB = 75% (over 70%, selects next smaller) |
+| 12.0 GB | `large` | 10GB / 12GB = 83% (over 70%, but largest model) |
+
+---
+
+### print_status(component, status, details, fix_cmd)
+
+Prints a standardized status line for diagnostic checks.
+
+```python
+def print_status(
+    component: str,
+    status: bool,
+    details: str = "",
+    fix_cmd: str = ""
+) -> None
+```
+
+<ParamField path="component" type="str" required>
+  Name of the component being checked (e.g., "FFmpeg", "torch").
+</ParamField>
+
+<ParamField path="status" type="bool" required>
+  Whether the component was found/passed (`True`) or failed (`False`).
+</ParamField>
+
+<ParamField path="details" type="str" default="">
+  Additional information (e.g., version, path).
+</ParamField>
+
+<ParamField path="fix_cmd" type="str" default="">
+  Command to fix the issue (shown only if `status=False`).
+</ParamField>
+
+**Example:**
+
+```python
+from app.health import print_status
+
+# Success case
+print_status("FFmpeg", True, "/usr/local/bin/ffmpeg")
+# Output: ✓ FFmpeg              Found (/usr/local/bin/ffmpeg)
+
+# Failure case
+print_status("FFmpeg", False, fix_cmd="brew install ffmpeg")
+# Output:
+# ✗ FFmpeg              MISSING
+#    ➜ Fix: brew install ffmpeg
+```
+
+**Implementation:**
+
+```python
+if status:
+    icon = f"{Fore.GREEN}✓{Style.RESET_ALL}"
+    print(
+        f" {icon} {Style.BRIGHT}{component:<20}{Style.RESET_ALL} "
+        f"{Fore.GREEN}Found{Style.RESET_ALL} {Style.DIM}({details}){Style.RESET_ALL}"
+    )
+else:
+    icon = f"{Fore.RED}✗{Style.RESET_ALL}"
+    print(
+        f" {icon} {Style.BRIGHT}{component:<20}{Style.RESET_ALL} "
+        f"{Fore.RED}MISSING{Style.RESET_ALL}"
+    )
+    if fix_cmd:
+        print(f"    {Fore.YELLOW}➜ Fix: {Style.BRIGHT}{fix_cmd}{Style.RESET_ALL}")
+```
+
+---
+
+### draw_bar(percent, width)
+
+Creates a text-based progress bar for memory usage visualization.
+
+```python
+def draw_bar(percent: float, width: int = 20) -> str
+```
+
+<ParamField path="percent" type="float" required>
+  Percentage to display (clamped to 0-100).
+</ParamField>
+
+<ParamField path="width" type="int" default="20">
+  Width of the bar in characters.
+</ParamField>
+
+<ResponseField name="return" type="str">
+  Colored progress bar string with percentage.
+</ResponseField>
+
+**Example:**
+
+```python
+from app.health import draw_bar
+
+print(draw_bar(45))   # [■■■■■■■■■·············] 45%
+print(draw_bar(75))   # [■■■■■■■■■■■■■■■·······] 75% (yellow)
+print(draw_bar(95))   # [■■■■■■■■■■■■■■■■■■■··] 95% (red)
+```
+
+**Color Logic:**
+
+```python
+color = Fore.GREEN if percent < 70 else (Fore.YELLOW if percent < 90 else Fore.RED)
+```
+
+- **Green** - Below 70% (safe)
+- **Yellow** - 70-89% (warning)
+- **Red** - 90%+ (critical)
+
+**Implementation:**
+
+```python
+percent = max(0.0, min(100.0, percent))  # Clamp to [0, 100]
+filled = int(width * percent / 100)
+bar = "■" * filled + "·" * (width - filled)
+
+color = Fore.GREEN if percent < 70 else (Fore.YELLOW if percent < 90 else Fore.RED)
+return f"{color}[{bar}] {percent:.0f}%{Style.RESET_ALL}"
+```
+
+---
+
+## Diagnostic Categories
+
+### 1. Hardware Check
+
+Detects compute device and calculates memory recommendations:
+
+```python
+device_type = utils.get_compute_device()  # 'cuda', 'mps', 'cpu'
+device_name = utils.get_device_name()     # 'NVIDIA GeForce RTX 3080'
+
+if device_type != "cpu":
+    print(f"🚀 Accelerator Active ({device_name})")
+```
+
+### 2. System Dependencies
+
+Verifies FFmpeg installation:
+
+```python
+has_ffmpeg, ffmpeg_path = utils.check_command("ffmpeg")
+if has_ffmpeg:
+    print_status("FFmpeg", True, ffmpeg_path)
+else:
+    fix = "brew install ffmpeg" if platform.system() == "Darwin" else "choco install ffmpeg"
+    print_status("FFmpeg", False, fix_cmd=fix)
+```
+
+### 3. Python Libraries
+
+Checks all required packages:
+
+```python
+deps = ["torch", "whisper", "watchdog", "pyperclip", "questionary", "colorama", "typer", "tqdm"]
+
+for dep in deps:
+    if utils.check_import(dep):
+        print_status(dep, True, "Installed")
+    else:
+        print_status(dep, False, fix_cmd=f"pip install {dep}")
+```
+
+### 4. Configuration Paths
+
+Validates WhatsApp Media folder:
+
+```python
+if config.WHATSAPP_INTERNAL_PATH and os.path.exists(config.WHATSAPP_INTERNAL_PATH):
+    print(f"📂 WhatsApp Path Detected")
+    print(f"   {config.WHATSAPP_INTERNAL_PATH}")
+else:
+    print(f"📂 WhatsApp Path NOT FOUND")
+    print("   ➜ Fix: Open config.json and set MANUAL_PATH_OVERRIDE")
+```
+
+---
+
+## Model Optimization Logic
+
+The diagnostics engine provides intelligent suggestions:
+
+### Critical Warning
+
+```python
+if current_req > usable_gb:
+    print(f"CRITICAL: '{current_model}' is too large for your system.")
+    print(f"It requires ~{current_req}GB, but you only have {usable_gb:.1f}GB safe.")
+    print(f"➜ Switch to '{rec_model}' in config.json")
+```
+
+### Large vs Turbo Advice
+
+```python
+if current_model == "large" and rec_model == "turbo":
+    print("ADVICE: You are using 'large'.")
+    print("'turbo' is significantly faster and uses less RAM.")
+```
+
+### Under-Utilization
+
+```python
+if current_req < rec_req:
+    print("OPTIMIZATION: Your hardware is under-utilized.")
+    print(f"You use '{current_model}', but can handle '{rec_model}'.")
+    print(f"➜ Switch to '{rec_model}' in config.json for better accuracy.")
+```
+
+### Optimal Configuration
+
+```python
+if current_model == rec_model:
+    print("✓ You are using the optimal model for your hardware.")
+```
+
+---
+
+## Dependencies
+
+```python
+import os
+import sys
+import platform
+from app import config, utils
+from typing import Optional, Dict
+from colorama import init, Fore, Style
+```
+
+---
+
+## Related Modules
+
+- [`config.py`](/api/config) - Configuration limits and paths
+- [`utils.py`](/api/utils) - Hardware detection utilities
+- [`core.py`](/api/core) - Model loading logic

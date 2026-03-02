@@ -1,0 +1,693 @@
+---
+title: Common Workflows
+description: Daily usage patterns and workflow examples for WhatsApp Auto-Transcriber
+---
+
+# Common Workflows
+
+This guide covers typical daily usage patterns, workflow examples, and best practices for integrating WhatsApp Auto-Transcriber into your routine.
+
+## Daily Usage Workflow
+
+The most common workflow is to run the transcriber continuously in the background.
+
+<Steps>
+  <Step title="Start the Transcriber">
+    Open a terminal and run:
+
+    ```bash
+    wa-transcriber
+    ```
+
+    You'll see:
+    ```
+    🚀 Initializing System
+       Device: MPS  # or CUDA, or CPU
+       Model:  turbo
+       ⏳ Loading...
+    ✓ System Ready!
+
+    🔍 Startup Scan: Checking for missed files (last 1h)...
+       ✓ All caught up.
+
+    👀 Watching Folder:
+       /Users/you/Library/Group Containers/...
+    ─────────────────────────────────────
+       Press Ctrl+C to stop the script.
+    ```
+  </Step>
+
+  <Step title="Receive Voice Notes">
+    When someone sends you a voice note in WhatsApp Desktop:
+
+    1. WhatsApp downloads the `.opus` file
+    2. The transcriber detects it instantly
+    3. Console shows:
+       ```
+       ⚡️ [WORKING] Processing: PTT-20260302-WA0001.opus
+       ✅ [DONE] Hey, can we meet at 3pm today?
+       ```
+  </Step>
+
+  <Step title="Use the Transcript">
+    The transcript is automatically:
+
+    - **Copied to clipboard:** Paste with `Cmd+V` (macOS) or `Ctrl+V` (Windows)
+    - **Saved to daily log:** `~/.wa-transcriber/logs/transcribed_audio/2026-03-02_daily.log`
+  </Step>
+
+  <Step title="Stop When Done">
+    Press `Ctrl+C` to stop the transcriber:
+
+    ```
+    ^C
+    ● Stopping Transcriber.
+    ```
+  </Step>
+</Steps>
+
+## Startup Backfill Feature
+
+The startup backfill ensures you don't miss voice notes when the transcriber isn't running.
+
+### How It Works
+
+**From core.py:34-86:**
+
+<Steps>
+  <Step title="Calculate Lookback Window">
+    When you start the transcriber, it checks the last `SCAN_LOOKBACK_HOURS` (default: 1 hour):
+
+    ```python
+    # core.py:43
+    lookback_hours = config.SCAN_LOOKBACK_HOURS
+    cutoff = now - (lookback_hours * 3600)
+    ```
+  </Step>
+
+  <Step title="Scan for Audio Files">
+    Recursively scans the WhatsApp Media folder for audio files:
+
+    ```python
+    # core.py:61-70
+    for root, _, files in os.walk(target_dir):
+        for filename in files:
+            if filename.endswith((".opus", ".m4a", ".mp3", ".wav")):
+                # Check modification time
+    ```
+  </Step>
+
+  <Step title="Check Processing History">
+    Each file is checked against the database to see if it's already been processed:
+
+    ```python
+    # core.py:76
+    if not db.is_file_processed(filename):
+        audio_queue.put(filepath)
+    ```
+  </Step>
+
+  <Step title="Queue Unprocessed Files">
+    New files are added to the processing queue in chronological order (oldest first).
+  </Step>
+</Steps>
+
+### Configuration
+
+Adjust the lookback window based on your usage pattern:
+
+<Tabs>
+  <Tab title="Always-On (Disable Backfill)">
+    If you keep the transcriber running 24/7:
+
+    ```json
+    {
+      "SCAN_LOOKBACK_ENABLED": false
+    }
+    ```
+
+    Saves startup time since you never miss messages.
+  </Tab>
+
+  <Tab title="Daily Restarts (1-6 Hours)">
+    If you restart the app once or twice per day:
+
+    ```json
+    {
+      "SCAN_LOOKBACK_ENABLED": true,
+      "SCAN_LOOKBACK_HOURS": 6
+    }
+    ```
+
+    Catches messages from the last 6 hours.
+  </Tab>
+
+  <Tab title="Intermittent Use (12-24 Hours)">
+    If you run the app a few times per week:
+
+    ```json
+    {
+      "SCAN_LOOKBACK_ENABLED": true,
+      "SCAN_LOOKBACK_HOURS": 24
+    }
+    ```
+
+    Catches messages from the last day.
+  </Tab>
+</Tabs>
+
+## Log Management Workflow
+
+### Viewing Logs
+
+Transcripts are saved to daily log files for easy reference.
+
+**View recent transcripts:**
+
+```bash
+# Show last 50 lines of audio logs
+wa-transcriber logs audio
+
+# Show last 50 lines of app logs
+wa-transcriber logs app
+```
+
+**Navigate to log directory:**
+
+<Tabs>
+  <Tab title="macOS">
+    ```bash
+    open ~/.wa-transcriber/logs/
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell
+    explorer $env:USERPROFILE\.wa-transcriber\logs\
+    ```
+  </Tab>
+
+  <Tab title="Linux">
+    ```bash
+    xdg-open ~/.wa-transcriber/logs/
+    ```
+  </Tab>
+</Tabs>
+
+### Log Structure
+
+**Directory layout:**
+```
+~/.wa-transcriber/logs/
+├── app/
+│   └── app_2026-03-02.log         # Application logs
+└── transcribed_audio/
+    ├── 2026-03-01_daily.log        # Yesterday's transcripts
+    └── 2026-03-02_daily.log        # Today's transcripts
+```
+
+**Daily log format:**
+```
+[2026-03-02 09:15:23] PTT-20260302-WA0001.opus
+Hey, can we meet at 3pm today?
+
+[2026-03-02 09:47:11] PTT-20260302-WA0002.opus
+I'm running 10 minutes late, be there soon!
+
+[2026-03-02 14:32:05] PTT-20260302-WA0003.opus
+Thanks for the meeting, let's follow up next week.
+```
+
+### Searching Logs
+
+Find specific transcripts using grep or PowerShell:
+
+<Tabs>
+  <Tab title="macOS/Linux">
+    ```bash
+    # Search all audio logs for a keyword
+    grep -r "meeting" ~/.wa-transcriber/logs/transcribed_audio/
+
+    # Search today's logs only
+    grep "meeting" ~/.wa-transcriber/logs/transcribed_audio/$(date +%Y-%m-%d)_daily.log
+
+    # Count voice notes received today
+    grep -c "PTT-" ~/.wa-transcriber/logs/transcribed_audio/$(date +%Y-%m-%d)_daily.log
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell
+    # Search all audio logs for a keyword
+    Select-String -Path "$env:USERPROFILE\.wa-transcriber\logs\transcribed_audio\*.log" -Pattern "meeting"
+
+    # Search today's logs only
+    $today = Get-Date -Format "yyyy-MM-dd"
+    Select-String -Path "$env:USERPROFILE\.wa-transcriber\logs\transcribed_audio\${today}_daily.log" -Pattern "meeting"
+
+    # Count voice notes received today
+    (Select-String -Path "$env:USERPROFILE\.wa-transcriber\logs\transcribed_audio\${today}_daily.log" -Pattern "PTT-").Count
+    ```
+  </Tab>
+</Tabs>
+
+### Log Cleanup
+
+Logs can grow large over time. Archive or delete old logs:
+
+<Tabs>
+  <Tab title="macOS/Linux">
+    ```bash
+    # Delete logs older than 30 days
+    find ~/.wa-transcriber/logs/transcribed_audio/ -name "*.log" -mtime +30 -delete
+
+    # Archive logs to compressed file
+    tar -czf ~/transcripts-archive-$(date +%Y-%m).tar.gz ~/.wa-transcriber/logs/transcribed_audio/
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell
+    # Delete logs older than 30 days
+    Get-ChildItem "$env:USERPROFILE\.wa-transcriber\logs\transcribed_audio\*.log" |
+      Where-Object {$_.LastWriteTime -lt (Get-Date).AddDays(-30)} |
+      Remove-Item
+
+    # Archive logs to zip file
+    $month = Get-Date -Format "yyyy-MM"
+    Compress-Archive -Path "$env:USERPROFILE\.wa-transcriber\logs\transcribed_audio\*.log" -DestinationPath "$env:USERPROFILE\transcripts-archive-$month.zip"
+    ```
+  </Tab>
+</Tabs>
+
+## Clipboard and Output Workflow
+
+### Automatic Clipboard Copy
+
+Every transcript is automatically copied to your clipboard for immediate use.
+
+**Workflow examples:**
+
+<AccordionGroup>
+  <Accordion title="Paste into Email">
+    1. Receive voice note
+    2. Wait for "✅ [DONE]" message
+    3. Switch to your email client
+    4. Press `Cmd+V` (macOS) or `Ctrl+V` (Windows)
+    5. Transcript is pasted
+  </Accordion>
+
+  <Accordion title="Paste into Note-Taking App">
+    1. Receive voice note
+    2. Transcript appears in console
+    3. Open Notion/Evernote/Obsidian
+    4. Paste with `Cmd+V` or `Ctrl+V`
+  </Accordion>
+
+  <Accordion title="Copy Multiple Transcripts">
+    If you receive multiple voice notes, only the most recent is in the clipboard.
+
+    **Solution:** View the daily log file to copy all transcripts:
+
+    ```bash
+    wa-transcriber logs audio
+    ```
+
+    Or open the log file:
+
+    <Tabs>
+      <Tab title="macOS">
+        ```bash
+        open ~/.wa-transcriber/logs/transcribed_audio/$(date +%Y-%m-%d)_daily.log
+        ```
+      </Tab>
+
+      <Tab title="Windows">
+        ```powershell
+        notepad $env:USERPROFILE\.wa-transcriber\logs\transcribed_audio\$(Get-Date -Format "yyyy-MM-dd")_daily.log
+        ```
+      </Tab>
+    </Tabs>
+  </Accordion>
+</AccordionGroup>
+
+### Clipboard Unavailable
+
+If clipboard access fails, the transcript is still saved to logs:
+
+```
+⚡️ [WORKING] Processing: PTT-20260302-WA0001.opus
+✅ [DONE] Hey, can we meet at 3pm today?
+⚠ Clipboard unavailable
+```
+
+**Solutions:**
+
+<Tabs>
+  <Tab title="macOS">
+    Usually works out of the box. If not:
+
+    ```bash
+    # Check permissions
+    # System Settings > Privacy & Security > Automation
+    # Ensure Terminal/iTerm has clipboard access
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    Usually works out of the box. If not, verify `pyperclip` is installed:
+
+    ```powershell
+    pip install --upgrade pyperclip
+    ```
+  </Tab>
+
+  <Tab title="Linux">
+    Install a clipboard manager:
+
+    ```bash
+    # Debian/Ubuntu
+    sudo apt install xclip
+
+    # Fedora
+    sudo dnf install xclip
+
+    # Arch
+    sudo pacman -S xclip
+    ```
+  </Tab>
+</Tabs>
+
+## Troubleshooting Workflows
+
+### Common Issue: No Transcription Appears
+
+<Steps>
+  <Step title="Verify transcriber is running">
+    Check the terminal for the "👀 Watching Folder" message.
+  </Step>
+
+  <Step title="Check WhatsApp path">
+    ```bash
+    wa-transcriber health
+    ```
+
+    Look for:
+    ```
+    📂 WhatsApp Path         Detected
+       /path/to/whatsapp/media
+    ```
+
+    If "NOT FOUND", run setup:
+    ```bash
+    wa-transcriber setup
+    ```
+  </Step>
+
+  <Step title="Verify voice note is downloaded">
+    In WhatsApp Desktop, ensure the voice note shows a blue checkmark (downloaded).
+
+    If it shows a download arrow, click it to download.
+  </Step>
+
+  <Step title="Check app logs">
+    ```bash
+    wa-transcriber logs app
+    ```
+
+    Look for error messages.
+  </Step>
+</Steps>
+
+### Common Issue: Slow Transcription
+
+<Steps>
+  <Step title="Check hardware acceleration">
+    ```bash
+    wa-transcriber health
+    ```
+
+    Look for:
+    ```
+    🚀 Accelerator           Active (NVIDIA GeForce RTX 3070)
+    ```
+
+    If it says "None (Running on CPU)", see the [Optimization Guide](/guides/optimization) for GPU setup.
+  </Step>
+
+  <Step title="Verify model size">
+    ```bash
+    wa-transcriber config
+    ```
+
+    If using `large-v3`, consider switching to `turbo` for faster results:
+
+    ```json
+    {
+      "MODEL_SIZE": "turbo"
+    }
+    ```
+  </Step>
+
+  <Step title="Close other GPU apps">
+    Games, video editors, and browsers can slow GPU transcription.
+
+    Close them and try again.
+  </Step>
+</Steps>
+
+### Common Issue: Out of Memory Error
+
+<Steps>
+  <Step title="Run health check">
+    ```bash
+    wa-transcriber health
+    ```
+
+    Note the recommended model size.
+  </Step>
+
+  <Step title="Switch to smaller model">
+    Edit `~/.wa-transcriber/config.json`:
+
+    ```json
+    {
+      "MODEL_SIZE": "medium"
+    }
+    ```
+  </Step>
+
+  <Step title="Or reduce memory limit">
+    ```json
+    {
+      "SYSTEM_MEMORY_LIMIT_FACTOR": 0.4,
+      "NVIDIA_VRAM_LIMIT_FACTOR": 0.5
+    }
+    ```
+  </Step>
+
+  <Step title="Restart transcriber">
+    ```bash
+    wa-transcriber
+    ```
+  </Step>
+</Steps>
+
+## Advanced Workflows
+
+### Running as Background Service
+
+<Tabs>
+  <Tab title="macOS (launchd)">
+    Create a launch agent to run the transcriber automatically on login.
+
+    **Create `~/Library/LaunchAgents/com.wa-transcriber.plist`:**
+
+    ```xml
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>com.wa-transcriber</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/usr/local/bin/wa-transcriber</string>
+        </array>
+        <key>RunAtLoad</key>
+        <true/>
+        <key>KeepAlive</key>
+        <true/>
+        <key>StandardOutPath</key>
+        <string>/tmp/wa-transcriber.log</string>
+        <key>StandardErrorPath</key>
+        <string>/tmp/wa-transcriber-error.log</string>
+    </dict>
+    </plist>
+    ```
+
+    **Load the agent:**
+
+    ```bash
+    launchctl load ~/Library/LaunchAgents/com.wa-transcriber.plist
+    ```
+
+    **Unload the agent:**
+
+    ```bash
+    launchctl unload ~/Library/LaunchAgents/com.wa-transcriber.plist
+    ```
+  </Tab>
+
+  <Tab title="Windows (Task Scheduler)">
+    Create a scheduled task to run the transcriber on login.
+
+    <Steps>
+      <Step title="Open Task Scheduler">
+        Press `Win+R`, type `taskschd.msc`, and press Enter.
+      </Step>
+
+      <Step title="Create Task">
+        1. Click "Create Task" in the right panel
+        2. Name: "WhatsApp Auto-Transcriber"
+        3. Select "Run whether user is logged on or not"
+      </Step>
+
+      <Step title="Set Trigger">
+        1. Go to "Triggers" tab
+        2. Click "New"
+        3. Begin the task: "At log on"
+        4. Click "OK"
+      </Step>
+
+      <Step title="Set Action">
+        1. Go to "Actions" tab
+        2. Click "New"
+        3. Action: "Start a program"
+        4. Program: `wa-transcriber`
+        5. Click "OK"
+      </Step>
+
+      <Step title="Save Task">
+        Click "OK" to save the task. The transcriber will now start automatically on login.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Linux (systemd)">
+    Create a systemd user service.
+
+    **Create `~/.config/systemd/user/wa-transcriber.service`:**
+
+    ```ini
+    [Unit]
+    Description=WhatsApp Auto-Transcriber
+    After=network.target
+
+    [Service]
+    Type=simple
+    ExecStart=/usr/local/bin/wa-transcriber
+    Restart=always
+    RestartSec=10
+
+    [Install]
+    WantedBy=default.target
+    ```
+
+    **Enable and start the service:**
+
+    ```bash
+    systemctl --user enable wa-transcriber.service
+    systemctl --user start wa-transcriber.service
+    ```
+
+    **Check status:**
+
+    ```bash
+    systemctl --user status wa-transcriber.service
+    ```
+
+    **Stop the service:**
+
+    ```bash
+    systemctl --user stop wa-transcriber.service
+    ```
+  </Tab>
+</Tabs>
+
+### Integration with Other Tools
+
+<AccordionGroup>
+  <Accordion title="Export to Notion">
+    Use the clipboard to paste transcripts directly into Notion:
+
+    1. Create a Notion page for voice note transcripts
+    2. When a voice note arrives, switch to Notion
+    3. Paste with `Cmd+V` or `Ctrl+V`
+    4. Add timestamp and context manually
+  </Accordion>
+
+  <Accordion title="Email Automation">
+    Forward transcripts to email using a script:
+
+    **Example Python script:**
+
+    ```python
+    import pyperclip
+    import smtplib
+    from email.message import EmailMessage
+
+    def email_transcript():
+        transcript = pyperclip.paste()
+        msg = EmailMessage()
+        msg.set_content(transcript)
+        msg['Subject'] = 'WhatsApp Voice Note Transcript'
+        msg['From'] = 'you@example.com'
+        msg['To'] = 'assistant@example.com'
+
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login('you@example.com', 'password')
+            server.send_message(msg)
+
+    if __name__ == '__main__':
+        email_transcript()
+    ```
+  </Accordion>
+
+  <Accordion title="Archive to Cloud Storage">
+    Sync log files to cloud storage for backup:
+
+    **Dropbox:**
+    ```bash
+    ln -s ~/.wa-transcriber/logs ~/Dropbox/wa-transcriber-logs
+    ```
+
+    **Google Drive (macOS):**
+    ```bash
+    ln -s ~/.wa-transcriber/logs ~/Google\ Drive/My\ Drive/wa-transcriber-logs
+    ```
+
+    **OneDrive (Windows):**
+    ```powershell
+    mklink /D "$env:OneDrive\wa-transcriber-logs" "$env:USERPROFILE\.wa-transcriber\logs"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="macOS Guide" icon="apple" href="/guides/macos">
+    Platform-specific workflows for macOS
+  </Card>
+  <Card title="Windows Guide" icon="windows" href="/guides/windows">
+    Platform-specific workflows for Windows
+  </Card>
+  <Card title="Optimization Guide" icon="gauge" href="/guides/optimization">
+    Tune performance for your workflow
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/cli/overview">
+    Complete command-line reference
+  </Card>
+</CardGroup>

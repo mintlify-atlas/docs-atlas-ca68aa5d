@@ -1,0 +1,284 @@
+---
+title: Whisper Model Selection
+description: Choosing the right Whisper model for your hardware and needs
+---
+
+WhatsApp Auto-Transcriber uses OpenAI's Whisper models for speech-to-text transcription. Selecting the right model is critical for balancing speed, accuracy, and hardware compatibility.
+
+## Model Comparison
+
+The following table shows all available Whisper models with their resource requirements:
+
+| Model | VRAM/RAM Req | Speed | Accuracy | Best For |
+| --- | --- | --- | --- | --- |
+| `tiny` | ~1 GB | ⚡️ Instant | Low | Older laptops |
+| `base` | ~1 GB | 🚀 Very Fast | Decent | Quick snippets |
+| `small` | ~2 GB | 🏃 Fast | Good | General usage |
+| `medium` | ~5 GB | ⚖️ Balanced | Great | Professional use |
+| `turbo` | ~6 GB | 🏎️ **Optimized** | **Excellent** | **M1/M2/M3 & RTX 3060+** |
+| `large-v3` | ~10 GB | 🐌 Slow | Perfect | Heavy accents / Noisy audio |
+
+## Memory Requirements
+
+The application uses different memory limits depending on your hardware:
+
+### NVIDIA GPU (CUDA)
+- Uses **70% of VRAM** by default (configurable via `NVIDIA_VRAM_LIMIT_FACTOR`)
+- Reserves 2GB for display/OS overhead
+- Example: 8GB RTX 3060 → ~5.6GB available → Recommended: `medium` or `turbo`
+
+### Apple Silicon (MPS)
+- Uses **50% of System RAM** by default (configurable via `SYSTEM_MEMORY_LIMIT_FACTOR`)
+- Shares unified memory with system
+- Example: 16GB M2 → ~8GB available → Recommended: `turbo`
+
+### CPU (No Acceleration)
+- Uses **50% of System RAM** by default
+- Significantly slower than GPU/MPS
+- Recommended: `tiny` or `base` for acceptable performance
+
+## Model Selection Guide
+
+### Automatic Selection (Recommended)
+
+Run the health check to get a personalized recommendation:
+
+```bash
+wa-transcriber health
+```
+
+The health check analyzes:
+- Available VRAM (NVIDIA) or RAM (Apple Silicon/CPU)
+- Current configuration
+- Memory safety margins
+
+It will suggest the optimal model and warn you if your current selection is too large.
+
+### Manual Selection
+
+To manually configure the model:
+
+1. **Via Setup Wizard:**
+   ```bash
+   wa-transcriber setup
+   ```
+   Select the "Model Size" option from the menu.
+
+2. **Via Config File:**
+   Edit `~/.wa-transcriber/config.json`:
+   ```json
+   {
+     "MODEL_SIZE": "turbo"
+   }
+   ```
+
+## Model-Specific Recommendations
+
+### `tiny` (1 GB)
+<ParamField path="MODEL_SIZE" type="string" default="tiny">
+  The smallest and fastest model.
+  
+  **Use when:**
+  - Running on old hardware (4GB RAM or less)
+  - Speed is critical over accuracy
+  - Transcribing simple, clear audio
+  
+  **Limitations:**
+  - Poor accuracy with accents
+  - Struggles with background noise
+  - May miss words in fast speech
+</ParamField>
+
+### `base` (1 GB)
+<ParamField path="MODEL_SIZE" type="string" default="base">
+  Slightly better accuracy than `tiny` with similar performance.
+  
+  **Use when:**
+  - You need better accuracy than `tiny`
+  - Hardware is limited to 4-6GB RAM
+  - Transcribing short voice notes
+</ParamField>
+
+### `small` (2 GB)
+<ParamField path="MODEL_SIZE" type="string" default="small">
+  Good balance for general use.
+  
+  **Use when:**
+  - You have 6-8GB RAM/VRAM
+  - Transcribing moderately clear audio
+  - You need reasonable accuracy and speed
+  
+  **Good for:**
+  - Most casual users
+  - Standard voice notes without heavy accents
+</ParamField>
+
+### `medium` (5 GB)
+<ParamField path="MODEL_SIZE" type="string" default="medium">
+  Professional-grade accuracy.
+  
+  **Use when:**
+  - You have 8-12GB RAM/VRAM
+  - Accuracy is more important than speed
+  - Transcribing professional content
+  
+  **Good for:**
+  - Business use
+  - Multi-language conversations
+  - Moderate background noise
+</ParamField>
+
+### `turbo` (6 GB) - Recommended
+<ParamField path="MODEL_SIZE" type="string" default="turbo">
+  Optimized variant with excellent speed-to-accuracy ratio.
+  
+  **Use when:**
+  - You have 12GB+ RAM/VRAM
+  - You have M1/M2/M3/M4 Mac or RTX 3060+
+  - You want the best overall experience
+  
+  **Why it's the default:**
+  - Faster than `large-v3` with similar accuracy
+  - Optimized for modern hardware
+  - Excellent with accents and noise
+</ParamField>
+
+### `large-v3` (10 GB)
+<ParamField path="MODEL_SIZE" type="string" default="large-v3">
+  The most accurate model available.
+  
+  **Use when:**
+  - You have 16GB+ RAM/VRAM
+  - You need maximum accuracy
+  - Transcribing very noisy audio or heavy accents
+  
+  **Limitations:**
+  - Significantly slower than `turbo`
+  - May cause out-of-memory errors on smaller systems
+  
+  **Note:** For most users, `turbo` provides better value.
+</ParamField>
+
+## English-Only Models
+
+Whisper also provides English-only variants for `tiny`, `base`, `small`, and `medium`:
+
+- `tiny.en.pt`
+- `base.en.pt`
+- `small.en.pt`
+- `medium.en.pt`
+
+These models:
+- Are slightly faster than multilingual versions
+- Only support English transcription
+- Can be more accurate for English-only content
+
+To use an English-only model:
+
+```json
+{
+  "MODEL_SIZE": "small.en",
+  "TRANSCRIPTION_LANGUAGE": "en"
+}
+```
+
+## Health Check Example Output
+
+```bash
+$ wa-transcriber health
+
+--- Hardware Check ---
+ 🚀 Accelerator          Active (NVIDIA GeForce RTX 3060)
+
+ 💾 Memory Rule          70% of VRAM (8.0GB)
+     Safe Allowance:      5.6 GB
+
+   Optimization Analysis:
+   Recommended (medium): [■■■■■■■■■■■·········] 89% (Leaves ~0.6 GB Headroom)
+
+   Result:
+   We suggest:          'medium'
+   Your Config:         'turbo'
+
+   CRITICAL: 'turbo' is too large for your system.
+      It requires ~6GB, but you only have 5.6GB safe.
+      ➜ Switch to 'medium' in config.json
+```
+
+<Warning>
+  Always run `wa-transcriber health` after changing models to ensure compatibility with your hardware.
+</Warning>
+
+## Model Download & Storage
+
+Models are automatically downloaded on first use and stored in:
+
+```
+~/.cache/whisper/
+```
+
+### Model Cleanup
+
+To save disk space, WhatsApp Auto-Transcriber can automatically delete unused models:
+
+```json
+{
+  "MODEL_CLEANUP_ENABLED": true,
+  "MODEL_RETENTION_DAYS": 3
+}
+```
+
+This will delete models that haven't been used in 3 days. See [Advanced Configuration](/configuration/advanced) for details.
+
+## Changing Models
+
+When you change the `MODEL_SIZE` setting:
+
+1. The new model will be downloaded automatically on next run
+2. The old model will be retained (unless cleanup is enabled)
+3. First transcription may be slower while the model loads
+
+<Tip>
+  You can switch between models at any time without losing configuration or history.
+</Tip>
+
+## Troubleshooting
+
+### Out of Memory Errors
+
+If you see errors like:
+- `CUDA out of memory`
+- `RuntimeError: MPS backend out of memory`
+
+**Solution:**
+1. Run `wa-transcriber health` to check recommendations
+2. Switch to a smaller model
+3. Adjust memory limit factors (see [Hardware Configuration](/configuration/hardware))
+
+### Slow Performance
+
+If transcription is too slow:
+
+1. **Check acceleration:** Run `wa-transcriber health` to verify GPU/MPS is detected
+2. **Use smaller model:** Switch from `large-v3` to `turbo`
+3. **Enable FP16 (Apple Silicon only):** Set `ENABLE_MPS_FP16: true`
+
+### Poor Accuracy
+
+If transcriptions have many errors:
+
+1. **Use larger model:** Upgrade from `tiny` to `small` or `medium`
+2. **Set language:** Configure `TRANSCRIPTION_LANGUAGE` instead of auto-detect
+3. **Check audio quality:** Some voice notes may be too noisy for any model
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Hardware Acceleration" icon="microchip" href="/configuration/hardware">
+    Optimize GPU and memory settings for your model
+  </Card>
+  
+  <Card title="Advanced Options" icon="sliders" href="/configuration/advanced">
+    Configure language settings and model cleanup
+  </Card>
+</CardGroup>

@@ -1,0 +1,267 @@
+---
+title: 'core.py'
+description: 'Main application orchestration and transcription lifecycle management'
+---
+
+## Overview
+
+The `core.py` module serves as the main entry point for the WhatsApp Auto-Transcriber. It orchestrates the entire transcription workflow, from initialization and model loading to file monitoring and processing.
+
+**Location:** `app/core.py`
+
+## Key Functions
+
+### run_transcriber()
+
+Main entry point that initializes and runs the complete transcription system.
+
+```python
+def run_transcriber() -> None
+```
+
+**Workflow:**
+
+1. **Database Initialization** - Initializes SQLite database and migrates legacy log files
+2. **Path Verification** - Validates WhatsApp Media folder exists
+3. **Model Cleanup** - Removes unused Whisper models (if enabled)
+4. **Device Detection** - Detects optimal compute device (CUDA/MPS/CPU)
+5. **Model Loading** - Loads Whisper model with fallback handling
+6. **Worker Initialization** - Starts background transcription thread
+7. **Lookback Scan** - Queues recent missed files (if enabled)
+8. **File Watching** - Starts watchdog Observer for real-time monitoring
+
+**Example:**
+
+```python
+from app.core import run_transcriber
+
+# Start the transcription service
+run_transcriber()
+```
+
+**Output:**
+
+```
+─────────────────────────────────────────────────
+🚀 Initializing System
+   Device: CUDA
+   Model:  turbo
+   ⏳ Loading...
+✓ System Ready!
+
+🔍 Startup Scan: Checking for missed files (last 1h)...
+   ✓ All caught up.
+
+📂 Logs saved to: ~/.wa-transcriber/logs/transcribed_audio
+
+👀 Watching Folder:
+   ~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+─────────────────────────────────────────────────
+   Press Ctrl+C to stop the script.
+```
+
+**Error Handling:**
+
+- If WhatsApp path not found, displays error and suggests running `wa-transcriber setup`
+- If model fails to load on GPU/MPS, automatically falls back to CPU
+- Gracefully handles Ctrl+C interrupt to stop observer
+
+**Related Configuration:**
+
+- `config.WHATSAPP_INTERNAL_PATH` - Target monitoring directory
+- `config.MODEL_SIZE` - Whisper model to load
+- `config.MODEL_CLEANUP_ENABLED` - Enable automatic model cleanup
+- `config.SCAN_LOOKBACK_ENABLED` - Enable startup scan
+
+---
+
+### queue_recent_files(audio_queue)
+
+Scans WhatsApp Media directory for recent audio files and adds unprocessed ones to the transcription queue.
+
+```python
+def queue_recent_files(audio_queue: queue.Queue) -> None
+```
+
+<ParamField path="audio_queue" type="queue.Queue" required>
+  The thread-safe queue where discovered audio file paths will be added for processing.
+</ParamField>
+
+**Behavior:**
+
+- Recursively walks `config.WHATSAPP_INTERNAL_PATH` and subdirectories
+- Filters files by extension: `.opus`, `.m4a`, `.mp3`, `.wav`
+- Only queues files modified within the last `config.SCAN_LOOKBACK_HOURS`
+- Checks database to skip already processed files
+- Sorts files by modification time (oldest first)
+- Skips execution if `config.SCAN_LOOKBACK_ENABLED` is False
+
+**Example:**
+
+```python
+import queue
+from app.core import queue_recent_files
+
+audio_queue = queue.Queue()
+queue_recent_files(audio_queue)
+
+print(f"Queued {audio_queue.qsize()} files")
+```
+
+**Example Output:**
+
+```
+🔍 Startup Scan: Checking for missed files (last 1h)...
+   + Queuing missed file: PTT-20260302-WA0012.opus
+   + Queuing missed file: PTT-20260302-WA0015.opus
+   ✓ Added 2 missed files to queue.
+```
+
+**Use Cases:**
+
+- Catch up on voice messages received while app was offline
+- Process historical audio files on first run
+- Recover from crashes or system restarts
+
+---
+
+## Initialization Sequence
+
+When `run_transcriber()` is called, the following initialization occurs:
+
+### 1. Database Setup
+
+```python
+db.init_db()
+db.migrate_from_logs()
+```
+
+Creates `history.db` SQLite database and imports any legacy log entries.
+
+### 2. Path Validation
+
+```python
+if config.WHATSAPP_INTERNAL_PATH is None or not os.path.exists(
+    config.WHATSAPP_INTERNAL_PATH
+):
+    print(f"{Fore.RED}✗ [ERROR] Could not find WhatsApp Media folder.{Style.RESET_ALL}")
+    return
+```
+
+### 3. Model Cleanup (Optional)
+
+```python
+if config.MODEL_CLEANUP_ENABLED:
+    maintenance.cleanup_unused_models(config.MODEL_SIZE)
+```
+
+Removes old Whisper model files based on `MODEL_RETENTION_DAYS`.
+
+### 4. Device Detection
+
+```python
+device = utils.get_compute_device()  # Returns 'cuda', 'mps', or 'cpu'
+```
+
+### 5. Model Loading
+
+```python
+try:
+    with tqdm(total=1, bar_format="{desc}", desc="   ⏳ Loading...") as pbar:
+        model = whisper.load_model(config.MODEL_SIZE, device=device)
+        pbar.update(1)
+except RuntimeError as e:
+    print(f"{Fore.RED}✗ Failed to load on {device}: {e}")
+    model = whisper.load_model(config.MODEL_SIZE, device="cpu")
+```
+
+### 6. Worker Thread
+
+```python
+audio_queue: queue.Queue = queue.Queue()
+worker = TranscriptionWorker(model, audio_queue)
+```
+
+Starts daemon thread that processes files from the queue.
+
+### 7. Observer Pattern
+
+```python
+event_handler = InternalAudioHandler(audio_queue)
+observer = Observer()
+observer.schedule(event_handler, path=config.WHATSAPP_INTERNAL_PATH, recursive=True)
+observer.start()
+```
+
+Sets up `watchdog` file system monitoring for real-time audio detection.
+
+---
+
+## Observer Pattern Implementation
+
+The module uses the **Observer pattern** from the `watchdog` library:
+
+```python
+from watchdog.observers import Observer
+from app.monitor import InternalAudioHandler
+
+event_handler = InternalAudioHandler(audio_queue)
+observer = Observer()
+observer.schedule(
+    event_handler,
+    path=config.WHATSAPP_INTERNAL_PATH,
+    recursive=True
+)
+observer.start()
+
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    observer.stop()
+observer.join()
+```
+
+**How It Works:**
+
+1. `InternalAudioHandler` receives file system events
+2. New `.opus` files trigger `on_created()` callback
+3. File path is added to `audio_queue`
+4. `TranscriptionWorker` thread picks up and processes
+
+---
+
+## Type Definitions
+
+```python
+from typing import Any
+
+WhisperModel = Any  # Type alias for loaded Whisper model
+```
+
+---
+
+## Dependencies
+
+```python
+import os
+import time
+import whisper
+import queue
+from typing import Any
+from watchdog.observers import Observer
+from colorama import init, Fore, Style
+from tqdm import tqdm
+from app import db, utils, config, maintenance
+from app.monitor import InternalAudioHandler
+from app.transcriber import TranscriptionWorker
+```
+
+---
+
+## Related Modules
+
+- [`transcriber.py`](/api/transcriber) - Background worker thread for audio processing
+- [`config.py`](/api/config) - Configuration management
+- [`monitor.py`](/api/monitor) - File system event handlers
+- [`db.py`](/api/db) - Database operations

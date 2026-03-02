@@ -1,0 +1,370 @@
+---
+title: 'transcriber.py'
+description: 'Background worker thread for audio transcription processing'
+---
+
+## Overview
+
+The `transcriber.py` module implements a multi-threaded transcription worker that processes audio files from a queue. It handles file readiness checks, Whisper model inference, clipboard operations, and logging.
+
+**Location:** `app/transcriber.py`
+
+## Class: TranscriptionWorker
+
+Daemon thread that continuously processes audio files from a queue.
+
+```python
+class TranscriptionWorker(threading.Thread)
+```
+
+**Inheritance:** `threading.Thread`
+
+**Threading Model:**
+
+- Runs as a **daemon thread** (terminates when main thread exits)
+- Uses `queue.Queue` for thread-safe communication
+- Blocks on `queue.get()` until new files are available
+- Calls `queue.task_done()` after each file
+
+---
+
+### \_\_init\_\_(model, audio_queue)
+
+Initializes the transcription worker and starts the background thread.
+
+```python
+def __init__(self, model: WhisperModel, audio_queue: queue.Queue) -> None
+```
+
+<ParamField path="model" type="WhisperModel" required>
+  Loaded Whisper model instance from `whisper.load_model()`.
+</ParamField>
+
+<ParamField path="audio_queue" type="queue.Queue" required>
+  Thread-safe queue containing file paths to process.
+</ParamField>
+
+**Example:**
+
+```python
+import queue
+import whisper
+from app.transcriber import TranscriptionWorker
+
+# Load model
+model = whisper.load_model("turbo", device="cuda")
+
+# Create queue and worker
+audio_queue = queue.Queue()
+worker = TranscriptionWorker(model, audio_queue)
+
+# Add files to queue
+audio_queue.put("/path/to/audio.opus")
+
+# Worker automatically processes in background
+```
+
+**Attributes Set:**
+
+- `self.model` - Whisper model reference
+- `self.queue` - Audio queue reference
+- `self.daemon = True` - Enables daemon mode
+
+**Behavior:**
+
+- Calls `super().__init__()` to initialize thread
+- Immediately calls `self.start()` to begin processing
+- Thread runs `self.run()` method in background
+
+---
+
+### run()
+
+Internal thread loop that processes queued files. **Not called directly.**
+
+```python
+def run(self) -> None
+```
+
+**Implementation:**
+
+```python
+def run(self) -> None:
+    while True:
+        filename: str = self.queue.get()
+        try:
+            self.process_file(filename)
+        finally:
+            self.queue.task_done()
+```
+
+**Flow:**
+
+1. Blocks on `self.queue.get()` until file is available
+2. Calls `self.process_file(filename)`
+3. Always calls `self.queue.task_done()` even if processing fails
+4. Repeats indefinitely
+
+---
+
+### process_file(filename)
+
+Processes a single audio file through the complete transcription pipeline.
+
+```python
+def process_file(self, filename: str) -> None
+```
+
+<ParamField path="filename" type="str" required>
+  Absolute path to the audio file to transcribe.
+</ParamField>
+
+**Processing Pipeline:**
+
+1. **File Readiness** - Waits for file to finish writing
+2. **Duration Calculation** - Loads audio and computes length
+3. **Transcription** - Runs Whisper inference with FP16 logic
+4. **Clipboard** - Copies transcript to system clipboard
+5. **Logging** - Saves to daily log file
+6. **Database** - Marks file as processed
+
+**Example:**
+
+```python
+worker.process_file("/path/to/PTT-20260302-WA0012.opus")
+```
+
+**Example Output:**
+
+```
+[14:32:15] ⚡️ [WORKING] Processing: PTT-20260302-WA0012.opus (0:23) (2 more in queue)
+✓ [DONE in 3.2s] Transcript:
+   This is a test voice message from WhatsApp
+   📋 Copied to clipboard
+```
+
+**FP16 Logic:**
+
+```python
+use_fp16 = False
+device_type = "cpu"
+
+if hasattr(self.model, "device"):
+    device_type = self.model.device.type
+
+if device_type == "cuda":
+    use_fp16 = True
+elif device_type == "mps":
+    use_fp16 = getattr(config, "ENABLE_MPS_FP16", False)
+```
+
+- **CUDA** - Always uses FP16 for performance
+- **MPS** - Uses FP16 only if `config.ENABLE_MPS_FP16` is True
+- **CPU** - Always uses FP32 to avoid errors
+
+**Error Handling:**
+
+- Timeout on file readiness: Prints `[TIMEOUT]` error and returns
+- Duration calculation failure: Shows "Unknown duration"
+- Transcription errors: Catches and prints exception
+- Clipboard unavailable: Shows warning but continues
+
+**Side Effects:**
+
+- Copies text to system clipboard via `pyperclip.copy()`
+- Appends entry to `~/.wa-transcriber/logs/transcribed_audio/YYYY-MM-DD_daily.log`
+- Inserts record into `history.db` database
+
+---
+
+### wait_for_file_ready(filepath, timeout)
+
+Polls file size to ensure it has finished writing before processing.
+
+```python
+def wait_for_file_ready(
+    self,
+    filepath: str,
+    timeout: int = config.FILE_READY_TIMEOUT
+) -> bool
+```
+
+<ParamField path="filepath" type="str" required>
+  Path to the file to monitor.
+</ParamField>
+
+<ParamField path="timeout" type="int" default="config.FILE_READY_TIMEOUT">
+  Maximum seconds to wait for file stability. Default is 10 seconds.
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  Returns `True` if file is ready, `False` if timeout reached.
+</ResponseField>
+
+**Algorithm:**
+
+```python
+start_time: float = time.time()
+last_size: int = -1
+
+while time.time() - start_time < timeout:
+    try:
+        current_size: int = os.path.getsize(filepath)
+        if current_size == last_size and current_size > 0:
+            return True  # File size stable
+        last_size = current_size
+        time.sleep(0.5)
+    except OSError:
+        time.sleep(0.5)
+
+return False  # Timeout reached
+```
+
+**Example:**
+
+```python
+if not worker.wait_for_file_ready("/path/to/audio.opus", timeout=15):
+    print("File not ready after 15 seconds")
+```
+
+**Why This Matters:**
+
+WhatsApp writes audio files incrementally. Attempting to transcribe before the write completes causes corruption errors. This method ensures the file is stable.
+
+**Poll Interval:** 500ms between checks
+
+---
+
+## Function: save_to_log
+
+Appends a transcript entry to a daily log file with metadata.
+
+```python
+def save_to_log(
+    text: str,
+    source_file: str,
+    duration: str,
+    elapsed: float
+) -> None
+```
+
+<ParamField path="text" type="str" required>
+  The transcribed text content.
+</ParamField>
+
+<ParamField path="source_file" type="str" required>
+  Full path to the original audio file.
+</ParamField>
+
+<ParamField path="duration" type="str" required>
+  Formatted audio duration (e.g., "0:23" or "1:42").
+</ParamField>
+
+<ParamField path="elapsed" type="float" required>
+  Processing time in seconds.
+</ParamField>
+
+**Log Format:**
+
+```
+─── 14:32:15 INFO ────────────────────────────────────────────────────────────
+PTT-20260302-WA0012.opus  |  ⏳ 0:23  |  ⏱ done in 3.2s
+
+This is a test voice message from WhatsApp
+
+```
+
+**File Location:**
+
+```python
+log_file = os.path.join(
+    config.TRANSCRIBED_AUDIO_LOGS_DIR,
+    f"{date_str}_daily.log"
+)
+# Example: ~/.wa-transcriber/logs/transcribed_audio/2026-03-02_daily.log
+```
+
+**Example:**
+
+```python
+from app.transcriber import save_to_log
+
+save_to_log(
+    text="Meeting scheduled for tomorrow at 3pm",
+    source_file="/path/to/PTT-20260302-WA0015.opus",
+    duration="0:08",
+    elapsed=1.4
+)
+```
+
+**Behavior:**
+
+- Creates log directory if it doesn't exist
+- Uses append mode (`"a"`)
+- UTF-8 encoding for international characters
+- Silently ignores `IOError` exceptions
+
+---
+
+## Threading Model
+
+The `TranscriptionWorker` implements the **Producer-Consumer pattern**:
+
+```
+┌─────────────────┐         ┌──────────────┐         ┌────────────────────┐
+│  File Monitor   │ ──────> │ Queue (FIFO) │ ──────> │ Worker Thread      │
+│  (Observer)     │  PUT    │              │  GET    │ (TranscriptionWorker) │
+└─────────────────┘         └──────────────┘         └────────────────────┘
+     PRODUCER                                               CONSUMER
+```
+
+**Thread Safety:**
+
+- `queue.Queue` is thread-safe (uses locks internally)
+- Multiple producers can safely call `queue.put()`
+- Worker thread blocks on `queue.get()` when empty
+- `queue.task_done()` signals completion for `queue.join()`
+
+**Daemon Behavior:**
+
+```python
+self.daemon = True
+```
+
+- Worker thread terminates when main thread exits
+- No explicit cleanup needed
+- Files in queue are lost on shutdown (acceptable for this use case)
+
+---
+
+## Dependencies
+
+```python
+import os
+import time
+import datetime
+import whisper
+import pyperclip
+import queue
+import threading
+from typing import Any
+from app import db, config, utils
+from colorama import init, Fore, Style
+```
+
+---
+
+## Type Definitions
+
+```python
+WhisperModel = Any  # Type alias for loaded Whisper model
+```
+
+---
+
+## Related Modules
+
+- [`core.py`](/api/core) - Creates worker and feeds queue
+- [`config.py`](/api/config) - Configuration settings
+- [`db.py`](/api/db) - Database operations
+- [`utils.py`](/api/utils) - Duration formatting

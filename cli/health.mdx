@@ -1,0 +1,212 @@
+---
+title: wa-transcriber health
+description: Run system diagnostics and verify dependencies
+icon: heart-pulse
+---
+
+The `health` command performs comprehensive system diagnostics to verify that all dependencies are installed and the application is properly configured.
+
+## Usage
+
+```bash
+wa-transcriber health
+```
+
+## Output
+
+The health check displays a detailed report covering:
+
+### 1. Hardware Check
+
+```bash
+● wa-transcriber v1.1.0
+  System Health Check Tool
+  © 2026 Jean Paul Fernandez (@jpxoi)
+──────────────────────────────────────────────────
+🏥 Running System Health Check...
+
+--- Hardware Check ---
+ 🚀 Accelerator          Active (NVIDIA CUDA (GeForce RTX 3080))
+
+ 💾 Memory Rule          70% of VRAM (10.0GB)
+     Safe Allowance:      7.0 GB
+
+   Optimization Analysis:
+   Recommended (turbo): [■■■■■■■■■■■■■■··········] 60% (Leaves ~2.8 GB Headroom)
+
+   Result:
+   We suggest:          'turbo'
+   Your Config:         'turbo'
+   ✓ You are using the optimal model for your hardware.
+```
+
+### 2. System Dependencies
+
+```bash
+--- System Dependencies ---
+ ✓ FFmpeg              Found (/usr/local/bin/ffmpeg)
+```
+
+If FFmpeg is missing:
+
+```bash
+ ✗ FFmpeg              MISSING
+    ➜ Fix: brew install ffmpeg
+```
+
+### 3. Python Libraries
+
+```bash
+--- Python Libraries ---
+ ✓ torch               Installed
+ ✓ whisper             Installed
+ ✓ watchdog            Installed
+ ✓ pyperclip           Installed
+ ✓ questionary         Installed
+ ✓ colorama            Installed
+ ✓ typer               Installed
+ ✓ tqdm                Installed
+```
+
+### 4. Configuration Paths
+
+```bash
+--- Configuration ---
+ 📂 WhatsApp Path       Detected
+    ~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+```
+
+If the path is not found:
+
+```bash
+ 📂 WhatsApp Path       NOT FOUND
+    ➜ Fix: Open config.json and set MANUAL_PATH_OVERRIDE
+    (Make sure you have installed the WhatsApp Store Version)
+```
+
+## Exit Codes
+
+<ParamField path="0" type="success">
+  All checks passed - system is ready
+</ParamField>
+
+<ParamField path="1" type="error">
+  One or more critical dependencies are missing
+</ParamField>
+
+## Model Optimization
+
+The health check analyzes your hardware and provides intelligent recommendations:
+
+<AccordionGroup>
+  <Accordion title="Optimal Configuration" icon="circle-check">
+    ```bash
+    ✓ You are using the optimal model for your hardware.
+    ```
+    Your current model size matches the recommendation.
+  </Accordion>
+  
+  <Accordion title="Model Too Large" icon="triangle-exclamation">
+    ```bash
+    CRITICAL: 'large' is too large for your system.
+       It requires ~10GB, but you only have 4.0GB safe.
+       ➜ Switch to 'medium' in config.json
+    ```
+    Your configured model exceeds available memory. Switch to the recommended model to prevent crashes.
+  </Accordion>
+  
+  <Accordion title="Under-Utilized Hardware" icon="arrow-up">
+    ```bash
+    OPTIMIZATION: Your hardware is under-utilized.
+       You use 'small', but can handle 'turbo'.
+       ➜ Switch to 'turbo' in config.json for better accuracy.
+    ```
+    Your hardware can support a larger model for better transcription quality.
+  </Accordion>
+  
+  <Accordion title="Large vs Turbo" icon="bolt">
+    ```bash
+    ADVICE: You are using 'large'.
+       'turbo' is significantly faster and uses less RAM.
+    ```
+    The `turbo` model offers better performance than `large` with minimal quality difference.
+  </Accordion>
+</AccordionGroup>
+
+## Memory Requirements
+
+The health check uses these minimum memory requirements per model:
+
+| Model | Memory Required |
+|-------|----------------|
+| `large` | ~10 GB |
+| `turbo` | ~6 GB |
+| `medium` | ~5 GB |
+| `small` | ~2 GB |
+| `base` | ~1 GB |
+| `tiny` | ~1 GB |
+
+<Note>
+  Memory limits are calculated based on your configuration:
+  - **NVIDIA GPUs**: `NVIDIA_VRAM_LIMIT_FACTOR` (default: 70%)
+  - **System RAM**: `SYSTEM_MEMORY_LIMIT_FACTOR` (default: 50%)
+</Note>
+
+## When to Run Health Check
+
+Run the health check:
+
+- After installing the application
+- When experiencing performance issues
+- After changing hardware
+- Before upgrading to a larger model
+- When troubleshooting errors
+
+## Example: All Checks Passed
+
+```bash
+$ wa-transcriber health
+● wa-transcriber v1.1.0
+  System Health Check Tool
+──────────────────────────────────────────────────
+🏥 Running System Health Check...
+
+--- Hardware Check ---
+ 🚀 Accelerator          Active (Apple Silicon (MPS))
+
+ 💾 Memory Rule          50% of System RAM (16.0GB)
+     Safe Allowance:      8.0 GB
+
+   Optimization Analysis:
+   Recommended (turbo): [■■■■■■■■■■■■■■■·········] 75% (Leaves ~2.0 GB Headroom)
+
+   Result:
+   We suggest:          'turbo'
+   Your Config:         'turbo'
+   ✓ You are using the optimal model for your hardware.
+
+--- System Dependencies ---
+ ✓ FFmpeg              Found (/opt/homebrew/bin/ffmpeg)
+
+--- Python Libraries ---
+ ✓ torch               Installed
+ ✓ whisper             Installed
+ ✓ watchdog            Installed
+ ✓ pyperclip           Installed
+ ✓ questionary         Installed
+ ✓ colorama            Installed
+ ✓ typer               Installed
+ ✓ tqdm                Installed
+
+--- Configuration ---
+ 📂 WhatsApp Path       Detected
+    ~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+
+──────────────────────────────────────────────────
+✓ System is ready! You can run 'wa-transcriber' now.
+```
+
+## Related Commands
+
+- [`wa-transcriber setup`](/cli/setup) - Configure the application after fixing issues
+- [`wa-transcriber config`](/cli/config) - View current configuration settings

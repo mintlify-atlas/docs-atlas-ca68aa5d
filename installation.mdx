@@ -1,0 +1,267 @@
+---
+title: Installation
+description: Install WhatsApp Auto-Transcriber using pip and verify your setup
+---
+
+# Installation
+
+Install WhatsApp Auto-Transcriber from the GitHub repository using pip. This process takes about 2-3 minutes depending on your internet connection.
+
+<Note>
+  Make sure you've completed the [Prerequisites](/prerequisites) before continuing.
+</Note>
+
+## Install from GitHub
+
+WhatsApp Auto-Transcriber is distributed as a Python package via GitHub. Follow these steps to install it:
+
+<Steps>
+  <Step title="Clone the repository">
+    Open your terminal and clone the repository:
+    
+    ```bash
+    git clone https://github.com/jpxoi/wa-transcriber.git
+    cd wa-transcriber
+    ```
+    
+    This downloads the source code to a new `wa-transcriber` directory.
+  </Step>
+  
+  <Step title="Install the package">
+    Install the package using pip:
+    
+    ```bash
+    pip install .
+    ```
+    
+    <Tabs>
+      <Tab title="macOS/Linux">
+        If you prefer to use a virtual environment:
+        
+        ```bash
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install .
+        ```
+      </Tab>
+      
+      <Tab title="Windows">
+        If you prefer to use a virtual environment:
+        
+        ```bash
+        python -m venv venv
+        venv\Scripts\activate
+        pip install .
+        ```
+      </Tab>
+    </Tabs>
+    
+    This installs `wa-transcriber` and all required dependencies listed in `pyproject.toml`:
+    
+    ```toml pyproject.toml
+    dependencies = [
+        "openai-whisper>=20231117",
+        "pyperclip",
+        "watchdog",
+        "torch",
+        "colorama",
+        "tqdm",
+        "questionary>=2.1.1",
+        "typer>=0.21.1",
+    ]
+    ```
+    
+    <Note>
+      The installation may take several minutes as PyTorch is a large dependency (~2GB).
+    </Note>
+  </Step>
+  
+  <Step title="Verify installation">
+    Confirm the installation was successful:
+    
+    ```bash
+    wa-transcriber --help
+    ```
+    
+    You should see the help output:
+    
+    ```
+    Usage: wa-transcriber [OPTIONS] COMMAND [ARGS]...
+
+      Automatically transcribe WhatsApp voice notes to your clipboard using
+      OpenAI Whisper.
+
+    Options:
+      --help  Show this message and exit.
+
+    Commands:
+      config  Shows the current configuration of the application.
+      health  Run system diagnostics to verify dependencies and folder...
+      logs    Print the last 50 lines of the specified log file.
+      reset   Resets the application by removing all user data and...
+      setup   Run interactive setup to configure the application.
+    ```
+  </Step>
+</Steps>
+
+## What gets installed
+
+When you run `pip install .`, the following components are installed:
+
+### Command-line tool
+
+The main executable is registered as a console script in `pyproject.toml`:
+
+```toml pyproject.toml
+[project.scripts]
+wa-transcriber = "app.cli:main"
+```
+
+This allows you to run `wa-transcriber` from anywhere in your terminal.
+
+### Python dependencies
+
+Key dependencies and their purposes:
+
+| Package | Purpose |
+|---------|----------|
+| `openai-whisper` | Core transcription engine using OpenAI's Whisper model |
+| `torch` | PyTorch for ML model inference and hardware acceleration |
+| `watchdog` | File system monitoring for detecting new voice notes |
+| `pyperclip` | Cross-platform clipboard integration |
+| `typer` | Modern CLI framework with automatic help generation |
+| `questionary` | Interactive prompts for the setup wizard |
+| `colorama` | Cross-platform colored terminal output |
+| `tqdm` | Progress bars for model loading |
+
+### Application structure
+
+The installed package includes these modules:
+
+```
+app/
+├── cli.py          # Command-line interface (commands defined here)
+├── core.py         # Main transcription loop
+├── transcriber.py  # Transcription worker thread
+├── monitor.py      # File system watcher
+├── health.py       # System diagnostics
+├── setup.py        # Interactive configuration wizard
+├── config.py       # Configuration management
+├── db.py           # SQLite database for tracking processed files
+├── utils.py        # Utility functions
+└── maintenance.py  # Model cleanup tasks
+```
+
+## Verify system health
+
+Before running the transcriber, verify your system is properly configured:
+
+```bash
+wa-transcriber health
+```
+
+This diagnostic tool checks:
+
+<CardGroup cols={2}>
+  <Card title="Hardware detection" icon="microchip">
+    Detects GPU/NPU acceleration (CUDA, MPS, or CPU)
+  </Card>
+  
+  <Card title="Memory analysis" icon="memory">
+    Calculates available RAM/VRAM and recommends optimal model size
+  </Card>
+  
+  <Card title="Dependencies" icon="puzzle-piece">
+    Verifies FFmpeg and all Python libraries are installed
+  </Card>
+  
+  <Card title="WhatsApp path" icon="folder">
+    Detects or prompts for WhatsApp Media folder location
+  </Card>
+</CardGroup>
+
+Example output:
+
+```bash
+🏥 Running System Health Check...
+
+--- Hardware Check ---
+ 🚀 Accelerator            Active (Apple M2 Pro)
+
+ 💾 Memory Rule            70% of VRAM (16.0GB)
+     Safe Allowance:      11.2 GB
+
+   Optimization Analysis:
+   Recommended (turbo): [■■■■■■■■■■■■■·········] 54% (Leaves ~5.1 GB Headroom)
+
+   Result:
+   We suggest:          'turbo'
+   Your Config:         'turbo'
+   ✓ You are using the optimal model for your hardware.
+
+--- System Dependencies ---
+ ✓ FFmpeg                Found (/opt/homebrew/bin/ffmpeg)
+
+--- Python Libraries ---
+ ✓ torch                 Installed
+ ✓ whisper               Installed
+ ✓ watchdog              Installed
+ ✓ pyperclip             Installed
+ ✓ questionary           Installed
+ ✓ colorama              Installed
+ ✓ typer                 Installed
+ ✓ tqdm                  Installed
+
+--- Configuration ---
+ 📂 WhatsApp Path        Detected
+    ~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+
+──────────────────────────────────────────────────
+✓ System is ready! You can run 'wa-transcriber' now.
+```
+
+<Warning>
+  If the health check reports any errors, fix them before proceeding. See the [Prerequisites](/prerequisites) page for installation instructions for missing dependencies.
+</Warning>
+
+## Troubleshooting installation
+
+### "command not found: wa-transcriber"
+
+The installation didn't add the command to your PATH. Try:
+
+```bash
+python3 -m pip install --user .
+```
+
+Or add `~/.local/bin` to your PATH.
+
+### "No module named 'app'"
+
+You're not in the cloned repository directory:
+
+```bash
+cd wa-transcriber
+pip install .
+```
+
+### PyTorch installation fails
+
+For manual PyTorch installation with specific CUDA version:
+
+```bash
+# Visit https://pytorch.org/get-started/locally/
+# and follow instructions for your system
+```
+
+### Import errors after installation
+
+Reinstall dependencies:
+
+```bash
+pip install --force-reinstall .
+```
+
+## Next steps
+
+Now that WhatsApp Auto-Transcriber is installed, proceed to the [Quickstart Guide](/quickstart) to configure and run your first transcription.

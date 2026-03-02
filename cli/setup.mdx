@@ -1,0 +1,218 @@
+---
+title: wa-transcriber setup
+description: Interactive configuration wizard
+icon: wand-magic-sparkles
+---
+
+The `setup` command launches an interactive wizard that guides you through configuring the WhatsApp Auto-Transcriber.
+
+## Usage
+
+```bash
+wa-transcriber setup
+```
+
+## Setup Flow
+
+The wizard is divided into two sections: **Core Settings** (required) and **Advanced Settings** (optional).
+
+### Core Settings
+
+#### 1. Model Selection
+
+The wizard analyzes your hardware and suggests the optimal model:
+
+```bash
+📂 Configuration will be saved to: ~/.wa-transcriber/config.json
+
+Based on your hardware, we have selected a default below.
+
+? Which transcription model would you like to use? 
+  ❯ turbo - SUGGESTED - Best balance of speed and accuracy
+    large - Maximum accuracy, highest resource usage
+    medium - High accuracy, moderate speed
+    small - Good accuracy, fast
+    base - Low accuracy, very fast
+    tiny - Lowest accuracy, fastest
+```
+
+<Note>
+  The wizard calculates your usable memory based on:
+  - **NVIDIA GPUs**: 70% of VRAM (with 2GB buffer)
+  - **System RAM**: 50% of total memory
+  
+  It then suggests the largest model that uses ≤70% of usable memory.
+</Note>
+
+**Model Descriptions**:
+
+| Model | Use Case | Memory |
+|-------|----------|--------|
+| `turbo` | **Recommended** - Best balance of speed and accuracy | ~6 GB |
+| `large` | Maximum accuracy, highest resource usage | ~10 GB |
+| `medium` | High accuracy, moderate speed | ~5 GB |
+| `small` | Good accuracy, fast | ~2 GB |
+| `base` | Low accuracy, very fast | ~1 GB |
+| `tiny` | Lowest accuracy, fastest | ~1 GB |
+
+#### 2. Language Selection
+
+```bash
+? Forced Language (Leave empty for Auto-Detect): 
+  (e.g. 'en', 'es')
+```
+
+Leave empty for automatic language detection, or enter a language code to force a specific language:
+
+- `en` - English
+- `es` - Spanish
+- `fr` - French
+- `de` - German
+- `it` - Italian
+- `pt` - Portuguese
+- `zh` - Chinese
+- [See full list](https://github.com/openai/whisper#available-models-and-languages)
+
+#### 3. WhatsApp Path Detection
+
+**If auto-detected**:
+
+```bash
+🔍 We detected your WhatsApp folder at:
+   ~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+
+? Is this the correct folder? Yes
+```
+
+**If not found**:
+
+```bash
+⚠  Could not automatically locate WhatsApp Media folder.
+? Please manually enter the path to your WhatsApp Media folder: 
+```
+
+<AccordionGroup>
+  <Accordion title="macOS Paths" icon="apple">
+    **WhatsApp Store Version** (recommended):
+    ```
+    ~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+    ```
+    
+    **Direct Download Version**:
+    ```
+    ~/Library/Application Support/WhatsApp/Media
+    ```
+  </Accordion>
+  
+  <Accordion title="Windows Paths" icon="windows">
+    **Microsoft Store Version** (recommended):
+    ```
+    %LOCALAPPDATA%\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers
+    ```
+    
+    **Direct Download Version**:
+    ```
+    %LOCALAPPDATA%\WhatsApp\Media
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Advanced Settings
+
+```bash
+? Do you want to configure advanced settings? No
+```
+
+If you select **Yes**, you can configure:
+
+#### Scan Lookback
+
+```bash
+? Enable 'Scan Lookback' on startup? (Checks for missed files) Yes
+? How many hours back should we scan? 1
+```
+
+When enabled, the transcriber scans for voice notes created within the last N hours on startup.
+
+#### Model Cleanup
+
+```bash
+? Enable Model Cleanup? (Deletes unused models to save disk space) Yes
+? Delete models unused for X days: 3
+```
+
+Automatically removes old Whisper model files that don't match your current `MODEL_SIZE`.
+
+#### Memory Limits
+
+```bash
+? System Memory Usage Limit: 
+  ❯ Safe (50%) - Recommended
+    Eco (30%) - minimal impact
+    Aggressive (90%) - Max speed
+```
+
+```bash
+? GPU VRAM Usage Limit (NVIDIA only): 
+  ❯ Standard (70%) - Recommended
+    Eco (30%)
+    Max (90%)
+```
+
+### Saving Configuration
+
+```bash
+? Save these settings to ~/.wa-transcriber/config.json? Yes
+
+✓ Configuration saved successfully!
+```
+
+## Complete Example
+
+```bash
+$ wa-transcriber setup
+● wa-transcriber v1.1.0
+  Setup Wizard
+  © 2026 Jean Paul Fernandez (@jpxoi)
+──────────────────────────────────────────────────
+📂 Configuration will be saved to: ~/.wa-transcriber/config.json
+
+Based on your hardware, we have selected a default below.
+? Which transcription model would you like to use? turbo
+? Forced Language (Leave empty for Auto-Detect): 
+
+🔍 We detected your WhatsApp folder at:
+   ~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+
+? Is this the correct folder? Yes
+? Do you want to configure advanced settings? No
+? Save these settings to ~/.wa-transcriber/config.json? Yes
+
+✓ Configuration saved successfully!
+```
+
+## Re-running Setup
+
+You can run the setup wizard at any time to reconfigure the application. Existing settings will be overwritten.
+
+<Warning>
+  Running setup will replace your current `config.json`. Your existing configuration will be lost.
+</Warning>
+
+## Skipping Setup
+
+If you decline to save:
+
+```bash
+? Save these settings to ~/.wa-transcriber/config.json? No
+
+✗ Configuration discarded.
+```
+
+No changes are made to your configuration.
+
+## Related Commands
+
+- [`wa-transcriber config`](/cli/config) - View saved configuration
+- [`wa-transcriber health`](/cli/health) - Verify configuration against system
+- [`wa-transcriber reset`](/cli/reset) - Delete all configuration and data

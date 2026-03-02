@@ -1,0 +1,260 @@
+---
+title: Prerequisites
+description: System requirements and dependencies needed to run WhatsApp Auto-Transcriber
+---
+
+# Prerequisites
+
+Before installing WhatsApp Auto-Transcriber, ensure your system meets the following requirements.
+
+## Python 3.10 or higher
+
+The application requires Python 3.10 or newer as specified in `pyproject.toml`:
+
+```toml pyproject.toml
+requires-python = ">=3.10"
+```
+
+### Why Python 3.10+?
+
+- **Type hints improvements**: The codebase uses modern type annotations for better code quality
+- **OpenAI Whisper compatibility**: The Whisper library requires Python 3.10+ for optimal performance
+- **Dependency compatibility**: Key libraries like `typer`, `torch`, and `watchdog` work best with Python 3.10+
+
+### Check your Python version
+
+<CodeGroup>
+```bash macOS/Linux
+python3 --version
+```
+
+```bash Windows
+python --version
+```
+</CodeGroup>
+
+You should see output like `Python 3.10.x` or higher.
+
+### Install or upgrade Python
+
+If you need to install or upgrade Python:
+
+<Tabs>
+  <Tab title="macOS">
+    Using Homebrew:
+    
+    ```bash
+    brew install python@3.10
+    ```
+    
+    Or download from [python.org](https://www.python.org/downloads/macos/)
+  </Tab>
+  
+  <Tab title="Windows">
+    Download the latest installer from [python.org](https://www.python.org/downloads/windows/)
+    
+    <Warning>
+      Make sure to check "Add Python to PATH" during installation!
+    </Warning>
+  </Tab>
+  
+  <Tab title="Linux">
+    Ubuntu/Debian:
+    
+    ```bash
+    sudo apt update
+    sudo apt install python3.10 python3-pip
+    ```
+    
+    Fedora:
+    
+    ```bash
+    sudo dnf install python3.10
+    ```
+  </Tab>
+</Tabs>
+
+## FFmpeg
+
+FFmpeg is required by OpenAI Whisper for audio file processing and format conversion. The health check tool verifies FFmpeg installation at `app/health.py:230`:
+
+```python app/health.py
+has_ffmpeg, ffmpeg_path = utils.check_command("ffmpeg")
+if has_ffmpeg and ffmpeg_path:
+    print_status("FFmpeg", True, ffmpeg_path)
+else:
+    fix = (
+        "brew install ffmpeg"
+        if platform.system() == "Darwin"
+        else "choco install ffmpeg"
+    )
+    print_status("FFmpeg", False, fix_cmd=fix)
+```
+
+### Why FFmpeg?
+
+- **Audio decoding**: Converts WhatsApp's `.opus` files to formats Whisper can process
+- **Format support**: Handles multiple audio formats (`.opus`, `.m4a`, `.mp3`, `.wav`)
+- **Resampling**: Ensures audio is at the correct sample rate for transcription
+
+### Install FFmpeg
+
+<Tabs>
+  <Tab title="macOS">
+    Using Homebrew:
+    
+    ```bash
+    brew install ffmpeg
+    ```
+    
+    Verify installation:
+    
+    ```bash
+    ffmpeg -version
+    ```
+  </Tab>
+  
+  <Tab title="Windows">
+    **Option 1: Using Chocolatey (Recommended)**
+    
+    ```bash
+    choco install ffmpeg
+    ```
+    
+    **Option 2: Manual installation**
+    
+    1. Download FFmpeg from [ffmpeg.org](https://ffmpeg.org/download.html)
+    2. Extract the archive
+    3. Add the `bin` folder to your system PATH
+    
+    Verify installation:
+    
+    ```bash
+    ffmpeg -version
+    ```
+  </Tab>
+  
+  <Tab title="Linux">
+    Ubuntu/Debian:
+    
+    ```bash
+    sudo apt update
+    sudo apt install ffmpeg
+    ```
+    
+    Fedora:
+    
+    ```bash
+    sudo dnf install ffmpeg
+    ```
+    
+    Verify installation:
+    
+    ```bash
+    ffmpeg -version
+    ```
+  </Tab>
+</Tabs>
+
+## WhatsApp Desktop
+
+The tool monitors WhatsApp Desktop's internal media folder to detect new voice notes. You must use the official **Store version** of WhatsApp Desktop.
+
+### Why WhatsApp Desktop?
+
+- **Local file access**: Desktop app downloads voice notes to a known folder location
+- **Real-time monitoring**: The tool watches this folder using the `watchdog` library
+- **File system integration**: Web WhatsApp doesn't provide file system access
+
+### Supported versions
+
+<Tabs>
+  <Tab title="macOS">
+    **WhatsApp from Mac App Store** (Recommended)
+    
+    Default media path:
+    ```
+    ~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+    ```
+    
+    Direct download version also supported:
+    ```
+    ~/Library/Application Support/WhatsApp/Media
+    ```
+  </Tab>
+  
+  <Tab title="Windows">
+    **WhatsApp from Microsoft Store** (Required)
+    
+    Default media path:
+    ```
+    %LOCALAPPDATA%\Packages\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\LocalState\shared\transfers
+    ```
+    
+    <Warning>
+      The desktop.exe version downloaded directly from WhatsApp.com may use a different folder structure. The Store version is strongly recommended.
+    </Warning>
+  </Tab>
+</Tabs>
+
+### Enable auto-download
+
+For the transcriber to work automatically, WhatsApp must download voice notes:
+
+1. Open WhatsApp Desktop
+2. Go to Settings → Storage
+3. Enable "Media Auto-Download" for voice messages
+
+Alternatively, manually click the download arrow on each voice note.
+
+## Hardware requirements
+
+The tool adapts to your available hardware. See the table below for model recommendations:
+
+| Model | RAM/VRAM Required | Hardware | Transcription Speed |
+|-------|-------------------|----------|---------------------|
+| tiny | ~1 GB | Any CPU | Instant (less than 1s for 10s audio) |
+| base | ~1 GB | Any CPU | Very fast (~1s) |
+| small | ~2 GB | Modern CPU | Fast (~2s) |
+| medium | ~5 GB | Good CPU/GPU | Moderate (~3s) |
+| turbo | ~6 GB | **Apple Silicon / RTX 3060+** | Fast (~1.5s) |
+| large | ~10 GB | High-end GPU | Slow (~4s) |
+
+<Note>
+  The health check tool (`wa-transcriber health`) will analyze your system and recommend the optimal model size.
+</Note>
+
+### Hardware acceleration
+
+The tool automatically detects and uses available hardware acceleration:
+
+- **Apple Silicon (M1/M2/M3/M4)**: Uses Metal Performance Shaders (MPS)
+- **NVIDIA GPUs**: Uses CUDA for GPU acceleration
+- **CPU fallback**: Works on any system, just slower
+
+Detection happens at `app/utils.py` and is displayed during startup:
+
+```bash
+🚀 Initializing System
+   Device: MPS  # or CUDA or CPU
+   Model:  turbo
+```
+
+## Disk space
+
+Whisper models are downloaded to `~/.cache/whisper/` on first use:
+
+| Model | Disk Space |
+|-------|------------|
+| `tiny` | ~75 MB |
+| `base` | ~150 MB |
+| `small` | ~500 MB |
+| `medium` | ~1.5 GB |
+| `turbo` | ~1.6 GB |
+| `large` | ~3 GB |
+
+The tool includes automatic cleanup to remove unused models (configurable during setup).
+
+## Next steps
+
+Once you've verified all prerequisites, proceed to the [Installation](/installation) guide.

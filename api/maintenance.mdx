@@ -1,0 +1,356 @@
+---
+title: "maintenance.py"
+description: "Automated cleanup of unused Whisper model files"
+icon: "broom"
+---
+
+The `maintenance.py` module provides automatic cleanup of old, unused Whisper model files to save disk space.
+
+## Overview
+
+Whisper models can be quite large (ranging from ~75MB for "tiny" to ~3GB for "large-v3"). When users switch between models, old model files remain in the cache directory. This module automatically deletes models that haven't been used in a configurable retention period.
+
+**Key Features:**
+- Automatic detection of unused models in the cache
+- Configurable retention period (default: 3 days)
+- Protection for the currently active model
+- Safe deletion with error handling
+- Retention period checking based on file access time
+
+---
+
+## Cache Directory Structure
+
+Whisper models are cached in:
+
+```
+~/.cache/whisper/
+```
+
+**Example Directory Contents:**
+```
+~/.cache/whisper/
+├── tiny.pt           (75 MB)
+├── base.pt           (142 MB)
+├── small.pt          (466 MB)
+├── medium.pt         (1.5 GB)
+├── large-v3.pt       (3.1 GB)
+└── turbo.pt          (809 MB)
+```
+
+**Total Size**: Can reach 6+ GB if all models are downloaded
+
+---
+
+## Functions
+
+### cleanup_unused_models
+
+```python
+def cleanup_unused_models(
+    current_model_name: str,
+    retention_days: int = config.MODEL_RETENTION_DAYS
+) -> None
+```
+
+Deletes models from the cache ONLY if they haven't been used in the specified retention period.
+
+<ParamField path="current_model_name" type="str" required>
+  The name of the currently active model (e.g., "turbo", "small", "large-v3").
+  This model will NEVER be deleted, regardless of access time.
+</ParamField>
+
+<ParamField path="retention_days" type="int" default="config.MODEL_RETENTION_DAYS">
+  Number of days before an unused model is considered eligible for deletion.
+  Defaults to `config.MODEL_RETENTION_DAYS` (typically 3 days).
+</ParamField>
+
+**Example:**
+
+```python
+from app.maintenance import cleanup_unused_models
+from app import config
+
+# Clean up old models, keeping the current one
+cleanup_unused_models(
+    current_model_name="turbo",
+    retention_days=3
+)
+
+# Use custom retention period (7 days)
+cleanup_unused_models(
+    current_model_name="large-v3",
+    retention_days=7
+)
+```
+
+**Console Output:**
+
+```
+🧹 Maintenance: Checking for old, unused models...
+   🗑️ Deleted old model: small.pt
+   🗑️ Deleted old model: medium.pt
+```
+
+---
+
+## Cleanup Logic
+
+The function follows this decision tree:
+
+```
+For each .pt file in ~/.cache/whisper/:
+  ├─ Is it in KNOWN_MODELS list?
+  │  ├─ No → Skip (not a Whisper model)
+  │  └─ Yes → Continue
+  │
+  ├─ Is it the current model?
+  │  ├─ Yes → Keep (protected)
+  │  └─ No → Continue
+  │
+  └─ Check last access time (st_atime)
+     ├─ Accessed within retention period? → Keep
+     └─ NOT accessed in retention period? → DELETE
+```
+
+---
+
+## KNOWN_MODELS List
+
+The function only processes files listed in `config.KNOWN_MODELS`:
+
+```python
+KNOWN_MODELS = [
+    "tiny.pt",
+    "base.pt",
+    "small.pt",
+    "medium.pt",
+    "large-v3.pt",
+    "turbo.pt",
+    "tiny.en.pt",      # English-only variant
+    "base.en.pt",      # English-only variant
+    "small.en.pt",     # English-only variant
+    "medium.en.pt",    # English-only variant
+]
+```
+
+**Why is this needed?**
+
+The cache directory may contain other files (metadata, temporary files, etc.). The `KNOWN_MODELS` list ensures only legitimate Whisper model files are considered for deletion.
+
+---
+
+## Retention Period Calculation
+
+The function uses the file's **last access time** (`st_atime`) to determine if it should be deleted:
+
+```python
+retention_period = retention_days * 24 * 60 * 60  # Convert days to seconds
+current_time = time.time()
+
+last_access = os.stat(file_path).st_atime
+
+if (current_time - last_access) > retention_period:
+    os.remove(file_path)  # Delete the model
+```
+
+**Example Timeline:**
+
+| Event | Date | Days Ago | Retention=3 | Action |
+|-------|------|----------|-------------|--------|
+| Model last used | Mar 1 | 7 days | Exceeded | DELETE |
+| Model last used | Mar 5 | 3 days | At limit | DELETE |
+| Model last used | Mar 6 | 2 days | Within | KEEP |
+| Model is current | N/A | N/A | Protected | KEEP |
+
+---
+
+## Protected Models
+
+The **currently active model** is ALWAYS protected from deletion:
+
+```python
+keep_filename = f"{current_model_name}.pt"
+
+if filename != keep_filename:
+    # Only consider for deletion if it's not the current model
+```
+
+**Example:**
+
+If `current_model_name = "turbo"`, then `turbo.pt` will NEVER be deleted, even if:
+- It hasn't been accessed in months
+- The retention period is set to 1 day
+- Other conditions would trigger deletion
+
+---
+
+## File Access Time vs Modification Time
+
+The function uses **access time** (`st_atime`), not modification time:
+
+| Timestamp | Meaning | Used by cleanup? |
+|-----------|---------|------------------|
+| `st_mtime` | Last modified (file content changed) | No |
+| `st_atime` | Last accessed (file read) | **Yes** |
+| `st_ctime` | Last metadata change | No |
+
+**Why access time?**
+
+Access time reflects when the model was last **used** for transcription, which is the relevant metric for determining if a model is still needed.
+
+<Note>
+  Some file systems may not accurately track access time if `noatime` is enabled for performance.
+  This is generally not an issue on macOS and Windows.
+</Note>
+
+---
+
+## Error Handling
+
+The function handles errors gracefully:
+
+```python
+try:
+    last_access = os.stat(file_path).st_atime
+    
+    if (current_time - last_access) > retention_period:
+        os.remove(file_path)
+        print(f"   🗑️ Deleted old model: {filename}")
+except OSError:
+    pass  # Silently skip files that can't be accessed/deleted
+```
+
+**Error Scenarios:**
+- File is locked by another process
+- Insufficient permissions
+- File was deleted by another process
+- Corrupted file metadata
+
+**Result**: Errors are silently ignored, and cleanup continues with the next file.
+
+---
+
+## Usage in the Application
+
+The cleanup function is typically called during application startup:
+
+```python
+from app import config
+from app.maintenance import cleanup_unused_models
+
+# Load configuration
+config.load_configuration()
+
+# Clean up old models if enabled
+if config.MODEL_CLEANUP_ENABLED:
+    cleanup_unused_models(
+        current_model_name=config.MODEL_SIZE,
+        retention_days=config.MODEL_RETENTION_DAYS
+    )
+```
+
+**Configuration Options:**
+
+In `~/.wa-transcriber/config.json`:
+
+```json
+{
+  "MODEL_SIZE": "turbo",
+  "MODEL_CLEANUP_ENABLED": true,
+  "MODEL_RETENTION_DAYS": 3
+}
+```
+
+---
+
+## Disk Space Savings
+
+Model sizes for reference:
+
+| Model | Size | Relative Speed | Quality |
+|-------|------|----------------|----------|
+| tiny | ~75 MB | Fastest | Lowest |
+| base | ~142 MB | Very Fast | Low |
+| small | ~466 MB | Fast | Medium |
+| medium | ~1.5 GB | Moderate | High |
+| turbo | ~809 MB | Fast | High |
+| large-v3 | ~3.1 GB | Slow | Highest |
+
+**Example Savings:**
+
+If a user switches from `large-v3` to `turbo` and doesn't use `large-v3` for 3 days:
+- **Space freed**: 3.1 GB
+- **Models kept**: Only `turbo.pt` (809 MB)
+
+---
+
+## Best Practices
+
+### Recommended Retention Periods
+
+| Use Case | Recommended Days | Rationale |
+|----------|------------------|------------|
+| Single user, consistent model | 3 days | Default, balances space and convenience |
+| Testing multiple models | 7 days | Gives time to compare models |
+| Limited disk space | 1 day | Aggressive cleanup |
+| Unlimited disk space | Disable cleanup | Keep all models downloaded |
+
+### Disabling Cleanup
+
+To disable automatic cleanup:
+
+```json
+{
+  "MODEL_CLEANUP_ENABLED": false
+}
+```
+
+Or manually delete the cache:
+
+```bash
+rm -rf ~/.cache/whisper/*.pt
+```
+
+---
+
+## Manual Cleanup
+
+You can also manually invoke the cleanup function:
+
+```python
+from app.maintenance import cleanup_unused_models
+
+# Aggressive cleanup: delete models not used in 1 day
+cleanup_unused_models("turbo", retention_days=1)
+
+# Conservative cleanup: delete models not used in 30 days
+cleanup_unused_models("turbo", retention_days=30)
+
+# Clean everything except current model (0 days = immediate)
+cleanup_unused_models("turbo", retention_days=0)
+```
+
+---
+
+## Dependencies
+
+```python
+import os
+import time
+from app import config
+from colorama import Fore, Style
+```
+
+**External Libraries:**
+- `colorama`: Cross-platform colored terminal output
+
+**Standard Library:**
+- `os`: File system operations
+- `time`: Timestamp calculations
+
+---
+
+## Source Location
+
+`~/workspace/source/app/maintenance.py`

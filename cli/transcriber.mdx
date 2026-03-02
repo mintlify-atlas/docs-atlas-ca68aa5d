@@ -1,0 +1,157 @@
+---
+title: wa-transcriber
+description: Run the WhatsApp voice note transcriber
+icon: play
+---
+
+The default command starts the transcription service, monitoring your WhatsApp media folder for new voice notes.
+
+## Usage
+
+```bash
+wa-transcriber
+```
+
+This is the default command - you can run it without specifying a subcommand.
+
+## Behavior
+
+### First Run
+
+If the application is not configured, running `wa-transcriber` will automatically launch the [interactive setup wizard](/cli/setup):
+
+```bash
+$ wa-transcriber
+● wa-transcriber v1.1.0
+  Setup Wizard
+  © 2026 Jean Paul Fernandez (@jpxoi)
+──────────────────────────────────────────────────
+📂 Configuration will be saved to: ~/.wa-transcriber/config.json
+
+? Which transcription model would you like to use? 
+  ❯ turbo - SUGGESTED - Best balance of speed and accuracy
+    large - Maximum accuracy, highest resource usage
+    medium - High accuracy, moderate speed
+    ...
+```
+
+### Normal Operation
+
+Once configured, the transcriber initializes and starts monitoring:
+
+```bash
+$ wa-transcriber
+● wa-transcriber v1.1.0
+  © 2026 Jean Paul Fernandez (@jpxoi)
+──────────────────────────────────────────────────
+🚀 Initializing System
+   Device: CUDA
+   Model:  turbo
+   ⏳ Loading...
+✓ System Ready!
+
+🔍 Startup Scan: Checking for missed files (last 1h)...
+   ✓ All caught up.
+
+📂 Logs saved to: ~/.wa-transcriber/logs/transcribed_audio
+
+👀 Watching Folder:
+   ~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+──────────────────────────────────────────────────
+   Press Ctrl+C to stop the script.
+```
+
+### During Transcription
+
+When a voice note is detected:
+
+```bash
+[2026-03-02 14:23:45] 🎤 New Voice Note Detected
+   File: PTT-20260302-WA0001.opus
+   Size: 245 KB
+   ⏳ Transcribing...
+   ✓ Done in 2.3s
+   📋 Copied to clipboard!
+```
+
+## Features
+
+<AccordionGroup>
+  <Accordion title="Startup Scan" icon="magnifying-glass">
+    On startup, the transcriber scans for recent audio files that may have been missed while the service was stopped.
+    
+    - Default lookback: **1 hour**
+    - Only processes files not in the history database
+    - Configurable via `SCAN_LOOKBACK_HOURS` in config
+    - Can be disabled with `SCAN_LOOKBACK_ENABLED: false`
+  </Accordion>
+  
+  <Accordion title="Model Loading" icon="microchip">
+    The transcriber automatically:
+    
+    - Detects available hardware (CUDA, MPS, or CPU)
+    - Loads the configured Whisper model
+    - Falls back to CPU if GPU loading fails
+    - Shows loading progress with timestamp
+  </Accordion>
+  
+  <Accordion title="Model Cleanup" icon="broom">
+    If enabled (default), unused Whisper models are automatically deleted to save disk space:
+    
+    - Default retention: **3 days**
+    - Only removes models not matching current `MODEL_SIZE`
+    - Configurable via `MODEL_RETENTION_DAYS`
+    - Disable with `MODEL_CLEANUP_ENABLED: false`
+  </Accordion>
+  
+  <Accordion title="Real-time Monitoring" icon="eye">
+    Uses watchdog to monitor the WhatsApp media folder:
+    
+    - Recursive directory watching
+    - Detects `.opus`, `.m4a`, `.mp3`, `.wav` files
+    - Queues files for background transcription
+    - Prevents duplicate processing via SQLite database
+  </Accordion>
+</AccordionGroup>
+
+## Stopping the Transcriber
+
+Press `Ctrl+C` to gracefully stop the service:
+
+```bash
+^C
+● Stopping Transcriber.
+```
+
+<Warning>
+  The transcriber must remain running to monitor for new voice notes. Consider running it in a background process or terminal multiplexer like `tmux` or `screen`.
+</Warning>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="WhatsApp Media folder not found" icon="folder-xmark">
+    ```bash
+    ✗ [ERROR] Could not find WhatsApp Media folder.
+       OS Detected: Darwin
+       Please run 'wa-transcriber setup' to configure the path.
+    ```
+    
+    **Solution**: Run `wa-transcriber setup` and manually specify the path to your WhatsApp media folder.
+  </Accordion>
+  
+  <Accordion title="Failed to load on GPU" icon="triangle-exclamation">
+    ```bash
+    ✗ Failed to load on cuda: CUDA out of memory
+       Falling back to CPU...
+    ```
+    
+    **Solution**: The selected model is too large for your GPU. Run `wa-transcriber setup` and choose a smaller model, or use `wa-transcriber health` to see recommended model sizes.
+  </Accordion>
+</AccordionGroup>
+
+## Related Commands
+
+- [`wa-transcriber setup`](/cli/setup) - Configure the application
+- [`wa-transcriber health`](/cli/health) - Verify system dependencies
+- [`wa-transcriber config`](/cli/config) - View current configuration

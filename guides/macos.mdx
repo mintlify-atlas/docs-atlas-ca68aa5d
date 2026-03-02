@@ -1,0 +1,341 @@
+---
+title: macOS Setup Guide
+description: Complete setup and optimization guide for WhatsApp Auto-Transcriber on macOS
+---
+
+# macOS Setup Guide
+
+This guide covers macOS-specific setup, optimization, and troubleshooting for WhatsApp Auto-Transcriber.
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install FFmpeg via Homebrew">
+    FFmpeg is required for audio processing. Install it using Homebrew:
+
+    ```bash
+    brew install ffmpeg
+    ```
+
+    Verify the installation:
+
+    ```bash
+    ffmpeg -version
+    ```
+  </Step>
+
+  <Step title="Install Python 3.10+">
+    macOS typically comes with Python, but you may need to install a newer version:
+
+    ```bash
+    brew install python@3.11
+    ```
+
+    Verify the installation:
+
+    ```bash
+    python3 --version
+    ```
+  </Step>
+
+  <Step title="Install WhatsApp Desktop">
+    Install the official WhatsApp Desktop app from the Mac App Store or direct download.
+
+    <Tabs>
+      <Tab title="Mac App Store (Recommended)">
+        Download from the [Mac App Store](https://apps.apple.com/app/whatsapp-desktop/id1147396723).
+
+        **Default Path:**
+        ```
+        ~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+        ```
+      </Tab>
+
+      <Tab title="Direct Download">
+        Download from [whatsapp.com/download](https://www.whatsapp.com/download).
+
+        **Default Path:**
+        ```
+        ~/Library/Application Support/WhatsApp/Media
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/jpxoi/wa-transcriber.git
+    cd wa-transcriber
+    ```
+  </Step>
+
+  <Step title="Install the package">
+    ```bash
+    pip install .
+    ```
+
+    Or use a virtual environment:
+
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install .
+    ```
+  </Step>
+
+  <Step title="Run health check">
+    Verify your system is ready and get model recommendations:
+
+    ```bash
+    wa-transcriber health
+    ```
+
+    This will:
+    - Detect Apple Silicon (M1/M2/M3/M4) and enable MPS acceleration
+    - Analyze your unified memory
+    - Suggest the optimal Whisper model size
+    - Verify FFmpeg installation
+  </Step>
+
+  <Step title="Configure the application">
+    Run the interactive setup wizard:
+
+    ```bash
+    wa-transcriber setup
+    ```
+
+    The app will automatically detect your WhatsApp Media folder and suggest optimal settings.
+  </Step>
+</Steps>
+
+## Apple Silicon Optimization
+
+### Metal Performance Shaders (MPS)
+
+Apple Silicon Macs (M1/M2/M3/M4) support hardware acceleration via Metal Performance Shaders (MPS). The app automatically detects and uses MPS when available.
+
+**Key Benefits:**
+- 5-10x faster transcription vs CPU
+- Lower power consumption
+- Utilizes Neural Engine for AI workloads
+
+### FP16 Precision Mode
+
+For even faster performance on Apple Silicon, you can enable half-precision (FP16) mode. This uses less memory and runs faster with minimal accuracy loss.
+
+**Enable FP16 in config.json:**
+
+```json
+{
+  "ENABLE_MPS_FP16": true
+}
+```
+
+<Note>
+  FP16 mode is disabled by default for maximum accuracy. Enable it if you prioritize speed over slight accuracy differences.
+</Note>
+
+### Memory Management
+
+Apple Silicon uses unified memory shared between CPU and GPU. The app respects the `SYSTEM_MEMORY_LIMIT_FACTOR` setting:
+
+```json
+{
+  "SYSTEM_MEMORY_LIMIT_FACTOR": 0.5
+}
+```
+
+This limits the app to using 50% of your total system memory, leaving headroom for macOS and other apps.
+
+**Recommended settings by Mac:**
+
+| Mac Model | RAM | Recommended Model | Memory Limit Factor |
+|-----------|-----|-------------------|---------------------|
+| M1/M2 (8GB) | 8GB | `small` | 0.5 |
+| M1/M2 (16GB) | 16GB | `turbo` | 0.5 |
+| M1/M2 Pro/Max (32GB+) | 32GB+ | `turbo` or `large-v3` | 0.6 |
+| M3/M4 (18GB+) | 18GB+ | `turbo` | 0.5 |
+
+## WhatsApp Path Detection
+
+The app automatically detects your WhatsApp Media folder. If auto-detection fails, you can manually configure it:
+
+**Location in config.py:**
+```python
+# config.py:245-253
+_mac_store = HOME_DIR / "Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media"
+_mac_direct = HOME_DIR / "Library/Application Support/WhatsApp/Media"
+```
+
+**Manual override in config.json:**
+
+```json
+{
+  "MANUAL_PATH_OVERRIDE": "/Users/yourusername/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media"
+}
+```
+
+<Tip>
+  Use the full absolute path, not `~`. The app will validate the path exists on startup.
+</Tip>
+
+## Performance Optimization Tips
+
+### 1. Choose the Right Model
+
+Run the health check to get personalized recommendations:
+
+```bash
+wa-transcriber health
+```
+
+Example output:
+```
+💾 Memory Rule             50% of System RAM (16.0GB)
+    Safe Allowance:      8.0 GB
+
+  Optimization Analysis:
+  Recommended (turbo): [■■■■■■■■■■■■■■······] 75% (Leaves ~2.0 GB Headroom)
+
+  Result:
+  We suggest:          'turbo'
+  Your Config:         'medium'
+
+  OPTIMIZATION: Your hardware is under-utilized.
+     You use 'medium', but can handle 'turbo'.
+     ➜ Switch to 'turbo' in config.json for better accuracy.
+```
+
+### 2. Enable Model Cleanup
+
+Models are cached in `~/.cache/whisper/`. Enable automatic cleanup to save disk space:
+
+```json
+{
+  "MODEL_CLEANUP_ENABLED": true,
+  "MODEL_RETENTION_DAYS": 3
+}
+```
+
+This removes models not used in the last 3 days.
+
+### 3. Adjust Startup Scan
+
+The startup scan checks for missed voice notes when you launch the app:
+
+```json
+{
+  "SCAN_LOOKBACK_ENABLED": true,
+  "SCAN_LOOKBACK_HOURS": 1
+}
+```
+
+Increase `SCAN_LOOKBACK_HOURS` if you frequently close the app and want to catch older messages.
+
+## Troubleshooting
+
+### "MPS backend out of memory"
+
+This means your selected model is too large for your Mac's memory.
+
+**Solution:**
+
+1. Run health check:
+   ```bash
+   wa-transcriber health
+   ```
+
+2. Switch to the recommended model size
+3. Or reduce the memory limit factor:
+   ```json
+   {
+     "SYSTEM_MEMORY_LIMIT_FACTOR": 0.4
+   }
+   ```
+
+### WhatsApp Path Not Found
+
+If the app can't find your WhatsApp Media folder:
+
+1. Verify WhatsApp Desktop is installed
+2. Check the path manually:
+   ```bash
+   ls ~/Library/Group\ Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+   ```
+
+3. If it exists, add it to config.json:
+   ```json
+   {
+     "MANUAL_PATH_OVERRIDE": "/Users/yourusername/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media"
+   }
+   ```
+
+### FFmpeg Not Found
+
+If the health check reports FFmpeg is missing:
+
+```bash
+brew install ffmpeg
+```
+
+If you installed FFmpeg via another method, ensure it's in your PATH:
+
+```bash
+which ffmpeg
+```
+
+## Logs and Debugging
+
+All logs are stored in `~/.wa-transcriber/logs/`:
+
+```bash
+# View transcribed audio logs
+wa-transcriber logs audio
+
+# View application logs
+wa-transcriber logs app
+
+# Or navigate manually
+open ~/.wa-transcriber/logs/
+```
+
+## Advanced Configuration
+
+### Custom File Ready Timeout
+
+Some Macs may need more time for files to be fully written:
+
+```json
+{
+  "FILE_READY_TIMEOUT": 15
+}
+```
+
+Default is 10 seconds. Increase if you see "file not ready" errors.
+
+### Language-Specific Transcription
+
+Force a specific language for better accuracy:
+
+```json
+{
+  "TRANSCRIPTION_LANGUAGE": "es"
+}
+```
+
+Leave as `null` for auto-detection.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Optimization Guide" icon="gauge" href="/guides/optimization">
+    Learn advanced performance tuning strategies
+  </Card>
+  <Card title="Workflows" icon="sitemap" href="/guides/workflows">
+    Discover efficient daily usage patterns
+  </Card>
+</CardGroup>

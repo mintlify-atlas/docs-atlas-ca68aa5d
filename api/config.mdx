@@ -1,0 +1,477 @@
+---
+title: 'config.py'
+description: 'Configuration management and system path detection'
+---
+
+## Overview
+
+The `config.py` module manages application settings, persistent configuration storage, and OS-specific path detection for WhatsApp Media folders.
+
+**Location:** `app/config.py`
+
+## Module-Level Variables
+
+### Application Identity
+
+```python
+APP_NAME = "wa-transcriber"
+APP_VERSION = "1.1.0"
+DEVELOPER_NAME = "Jean Paul Fernandez"
+DEVELOPER_USERNAME = "jpxoi"
+```
+
+### System Paths
+
+```python
+HOME_DIR: Path = Path.home()
+SYSTEM: str = platform.system()  # 'Darwin', 'Windows', 'Linux'
+APP_DATA_DIR: Path = ~/.wa-transcriber/
+CONFIG_FILE_PATH: Path = ~/.wa-transcriber/config.json
+DB_PATH: Path = ~/.wa-transcriber/history.db
+```
+
+### Log Directories
+
+```python
+APP_LOGS_DIR: Path = ~/.wa-transcriber/logs/app/
+TRANSCRIBED_AUDIO_LOGS_DIR: Path = ~/.wa-transcriber/logs/transcribed_audio/
+```
+
+### Known Whisper Models
+
+```python
+KNOWN_MODELS: List[str] = [
+    "tiny.pt",
+    "base.pt",
+    "small.pt",
+    "medium.pt",
+    "large-v3.pt",
+    "turbo.pt",
+    "tiny.en.pt",
+    "base.en.pt",
+    "small.en.pt",
+    "medium.en.pt",
+]
+```
+
+---
+
+## DEFAULT_CONFIG Structure
+
+Default configuration values used for new installations:
+
+```python
+DEFAULT_CONFIG: Dict[str, Any] = {
+    "MODEL_SIZE": "turbo",
+    "TRANSCRIPTION_LANGUAGE": None,
+    "SCAN_LOOKBACK_ENABLED": True,
+    "SCAN_LOOKBACK_HOURS": 1,
+    "MODEL_CLEANUP_ENABLED": True,
+    "MODEL_RETENTION_DAYS": 3,
+    "ENABLE_MPS_FP16": False,
+    "SYSTEM_MEMORY_LIMIT_FACTOR": 0.5,
+    "NVIDIA_VRAM_LIMIT_FACTOR": 0.7,
+    "FILE_READY_TIMEOUT": 10,
+    "MANUAL_PATH_OVERRIDE": None,
+}
+```
+
+### Configuration Fields
+
+<ParamField path="MODEL_SIZE" type="str" default="turbo">
+  Whisper model to use: `tiny`, `base`, `small`, `medium`, `turbo`, or `large`.
+</ParamField>
+
+<ParamField path="TRANSCRIPTION_LANGUAGE" type="str | None" default="None">
+  ISO language code (e.g., `"en"`, `"es"`). `None` enables auto-detection.
+</ParamField>
+
+<ParamField path="SCAN_LOOKBACK_ENABLED" type="bool" default="True">
+  Enable startup scan for missed audio files.
+</ParamField>
+
+<ParamField path="SCAN_LOOKBACK_HOURS" type="int" default="1">
+  How many hours back to scan for missed files.
+</ParamField>
+
+<ParamField path="MODEL_CLEANUP_ENABLED" type="bool" default="True">
+  Automatically delete unused Whisper model files.
+</ParamField>
+
+<ParamField path="MODEL_RETENTION_DAYS" type="int" default="3">
+  Days to keep unused models before deletion.
+</ParamField>
+
+<ParamField path="ENABLE_MPS_FP16" type="bool" default="False">
+  Enable FP16 inference on Apple Silicon (experimental).
+</ParamField>
+
+<ParamField path="SYSTEM_MEMORY_LIMIT_FACTOR" type="float" default="0.5">
+  Max fraction of system RAM to use (50%).
+</ParamField>
+
+<ParamField path="NVIDIA_VRAM_LIMIT_FACTOR" type="float" default="0.7">
+  Max fraction of NVIDIA VRAM to use (70%).
+</ParamField>
+
+<ParamField path="FILE_READY_TIMEOUT" type="int" default="10">
+  Seconds to wait for file write completion.
+</ParamField>
+
+<ParamField path="MANUAL_PATH_OVERRIDE" type="str | None" default="None">
+  Custom WhatsApp Media path. Overrides auto-detection.
+</ParamField>
+
+---
+
+## Runtime Configuration Variables
+
+These module-level variables are populated by `load_configuration()`:
+
+```python
+MODEL_SIZE: str = "turbo"
+TRANSCRIPTION_LANGUAGE: Optional[str] = None
+SCAN_LOOKBACK_ENABLED: bool = True
+SCAN_LOOKBACK_HOURS: int = 1
+MODEL_CLEANUP_ENABLED: bool = True
+MODEL_RETENTION_DAYS: int = 3
+ENABLE_MPS_FP16: bool = False
+SYSTEM_MEMORY_LIMIT_FACTOR: float = 0.5
+NVIDIA_VRAM_LIMIT_FACTOR: float = 0.7
+FILE_READY_TIMEOUT: int = 10
+MANUAL_PATH_OVERRIDE: Optional[str] = None
+WHATSAPP_INTERNAL_PATH: Optional[str] = None  # Set by detect_whatsapp_path()
+```
+
+**Access in code:**
+
+```python
+from app import config
+
+print(f"Model: {config.MODEL_SIZE}")
+print(f"Path: {config.WHATSAPP_INTERNAL_PATH}")
+```
+
+---
+
+## Functions
+
+### load_configuration()
+
+Loads user settings from `config.json` and updates module-level variables.
+
+```python
+def load_configuration() -> bool
+```
+
+<ResponseField name="return" type="bool">
+  Returns `True` if config loaded successfully, `False` if file doesn't exist (first run).
+</ResponseField>
+
+**Example:**
+
+```python
+from app import config
+
+if config.load_configuration():
+    print(f"Loaded config: {config.MODEL_SIZE}")
+else:
+    print("First run - using defaults")
+```
+
+**Behavior:**
+
+- Returns `False` if `config.json` doesn't exist (first run)
+- Reads JSON file and updates global variables
+- Falls back to `DEFAULT_CONFIG` values for missing keys
+- Prints warning if JSON parsing fails
+
+**Implementation:**
+
+```python
+if not CONFIG_FILE_PATH.exists():
+    return False
+
+try:
+    with open(CONFIG_FILE_PATH, "r") as f:
+        user_config = json.load(f)
+    
+    MODEL_SIZE = user_config.get("MODEL_SIZE", DEFAULT_CONFIG["MODEL_SIZE"])
+    TRANSCRIPTION_LANGUAGE = user_config.get(
+        "TRANSCRIPTION_LANGUAGE", DEFAULT_CONFIG["TRANSCRIPTION_LANGUAGE"]
+    )
+    # ... (loads all config fields)
+    return True
+except Exception as e:
+    print(f"⚠ Error loading config: {e}")
+    return False
+```
+
+---
+
+### save_configuration(new_config)
+
+Writes configuration dictionary to `config.json`.
+
+```python
+def save_configuration(new_config: Dict[str, Any]) -> None
+```
+
+<ParamField path="new_config" type="Dict[str, Any]" required>
+  Dictionary containing configuration key-value pairs to save.
+</ParamField>
+
+**Example:**
+
+```python
+from app import config
+
+new_settings = {
+    "MODEL_SIZE": "small",
+    "TRANSCRIPTION_LANGUAGE": "en",
+    "SCAN_LOOKBACK_HOURS": 2,
+    "ENABLE_MPS_FP16": True,
+}
+
+config.save_configuration(new_settings)
+```
+
+**Implementation:**
+
+```python
+try:
+    with open(CONFIG_FILE_PATH, "w") as f:
+        json.dump(new_config, f, indent=4)
+except Exception as e:
+    print(f"change_this Error saving config: {e}")
+```
+
+**Output File Format:**
+
+```json
+{
+    "MODEL_SIZE": "small",
+    "TRANSCRIPTION_LANGUAGE": "en",
+    "SCAN_LOOKBACK_ENABLED": true,
+    "SCAN_LOOKBACK_HOURS": 2,
+    "MODEL_CLEANUP_ENABLED": true,
+    "MODEL_RETENTION_DAYS": 3,
+    "ENABLE_MPS_FP16": true,
+    "SYSTEM_MEMORY_LIMIT_FACTOR": 0.5,
+    "NVIDIA_VRAM_LIMIT_FACTOR": 0.7,
+    "FILE_READY_TIMEOUT": 10,
+    "MANUAL_PATH_OVERRIDE": null
+}
+```
+
+---
+
+### find_default_whatsapp_path()
+
+Attempts to auto-detect WhatsApp Media folder based on OS conventions.
+
+```python
+def find_default_whatsapp_path() -> Optional[str]
+```
+
+<ResponseField name="return" type="str | None">
+  Returns path string if found, otherwise `None`.
+</ResponseField>
+
+**Detection Logic:**
+
+#### macOS (Darwin)
+
+```python
+if SYSTEM == "Darwin":
+    _mac_store = HOME_DIR / "Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media"
+    _mac_direct = HOME_DIR / "Library/Application Support/WhatsApp/Media"
+    
+    if _mac_store.exists():
+        return str(_mac_store)  # Mac App Store version
+    elif _mac_direct.exists():
+        return str(_mac_direct)  # Direct download version
+```
+
+#### Windows
+
+```python
+elif SYSTEM == "Windows":
+    local_app_data = os.getenv("LOCALAPPDATA", "")
+    
+    _win_store = os.path.join(
+        local_app_data,
+        "Packages",
+        "5319275A.WhatsAppDesktop_cv1g1gvanyjgm",
+        "LocalState",
+        "shared",
+        "transfers",
+    )
+    _win_legacy = os.path.join(local_app_data, "WhatsApp", "Media")
+    
+    if os.path.exists(_win_store):
+        return _win_store  # Microsoft Store version
+    elif os.path.exists(_win_legacy):
+        return _win_legacy  # Legacy version
+```
+
+**Example:**
+
+```python
+path = config.find_default_whatsapp_path()
+if path:
+    print(f"Found WhatsApp at: {path}")
+else:
+    print("Could not auto-detect WhatsApp path")
+```
+
+---
+
+### detect_whatsapp_path()
+
+Sets the `WHATSAPP_INTERNAL_PATH` global variable. Prioritizes manual override, then auto-detection.
+
+```python
+def detect_whatsapp_path() -> None
+```
+
+**Priority Order:**
+
+1. **Manual Override** - If `MANUAL_PATH_OVERRIDE` is set and exists
+2. **Auto-Detection** - Calls `find_default_whatsapp_path()`
+
+**Implementation:**
+
+```python
+global WHATSAPP_INTERNAL_PATH
+
+# 1. Check Manual Override
+if MANUAL_PATH_OVERRIDE and os.path.exists(MANUAL_PATH_OVERRIDE):
+    WHATSAPP_INTERNAL_PATH = MANUAL_PATH_OVERRIDE
+    return
+
+# 2. Check Auto-Detect
+WHATSAPP_INTERNAL_PATH = find_default_whatsapp_path()
+```
+
+**Example:**
+
+```python
+from app import config
+
+config.detect_whatsapp_path()
+
+if config.WHATSAPP_INTERNAL_PATH:
+    print(f"Using path: {config.WHATSAPP_INTERNAL_PATH}")
+else:
+    print("Path not found - run 'wa-transcriber setup'")
+```
+
+---
+
+## Helper Functions
+
+### get_app_data_dir()
+
+Returns the application data directory and creates it if missing.
+
+```python
+def get_app_data_dir() -> Path
+```
+
+<ResponseField name="return" type="Path">
+  Path to `~/.wa-transcriber/` directory.
+</ResponseField>
+
+**Example:**
+
+```python
+app_dir = config.get_app_data_dir()
+print(app_dir)  # PosixPath('/home/user/.wa-transcriber')
+```
+
+---
+
+### show_config()
+
+Prints current configuration in a formatted, grouped display.
+
+```python
+def show_config() -> None
+```
+
+**Example Output:**
+
+```
+ 🤖 Core Settings
+   • Model Size                 turbo
+   • Transcription Language     Auto / None
+   • File Ready Timeout         10s
+
+ 🧹 Automation & Cleanup
+   • Scan Lookback              Enabled
+      Lookback Depth            1 hours
+   • Model Cleanup              Enabled
+      Retention Period          3 days
+
+ ⚡ Hardware Limits
+   • System Memory Limit        50%
+   • NVIDIA VRAM Limit          70%
+   • Apple MPS FP16             Disabled
+
+ 📂 Paths
+   • WhatsApp Media Path        Auto-Detected (Default)
+
+─────────────────────────────────────────────────
+ ➜ To Change:     Run wa-transcriber setup
+ ➜ Config File: ~/.wa-transcriber/config.json
+```
+
+**Usage:**
+
+```python
+from app import config
+
+config.show_config()
+```
+
+---
+
+## Dependencies
+
+```python
+import os
+import json
+import platform
+from app import utils
+from colorama import Style, Fore
+from pathlib import Path
+from typing import Optional, Dict, Any, List
+```
+
+---
+
+## Typical Initialization Flow
+
+```python
+from app import config
+
+# 1. Load user settings (or use defaults)
+config.load_configuration()
+
+# 2. Detect WhatsApp path
+config.detect_whatsapp_path()
+
+# 3. Access settings
+print(f"Model: {config.MODEL_SIZE}")
+print(f"Path: {config.WHATSAPP_INTERNAL_PATH}")
+print(f"Lookback: {config.SCAN_LOOKBACK_HOURS}h")
+```
+
+---
+
+## Related Modules
+
+- [`core.py`](/api/core) - Uses configuration for initialization
+- [`health.py`](/api/health) - Reads limits for diagnostics
+- [`transcriber.py`](/api/transcriber) - Uses timeout and language settings

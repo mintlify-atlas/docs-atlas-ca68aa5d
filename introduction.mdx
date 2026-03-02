@@ -1,0 +1,112 @@
+---
+title: Introduction
+description: Automatically transcribe WhatsApp voice notes locally using OpenAI Whisper with hardware acceleration
+---
+
+# WhatsApp Auto-Transcriber
+
+A lightning-fast, privacy-focused CLI tool that automatically transcribes incoming WhatsApp voice notes on macOS and Windows using OpenAI Whisper.
+
+## Why use this tool?
+
+WhatsApp's native transcription is often unavailable or slow. This tool provides a superior, **100% local** alternative that works instantly the moment a voice note is downloaded, leveraging your hardware (GPU/NPU/CPU) for maximum speed and privacy.
+
+<Note>
+  **Desktop only:** This tool requires the official WhatsApp Desktop App (Store Version). It monitors the internal file system for new `.opus` audio files.
+</Note>
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Hardware accelerated" icon="bolt" href="/prerequisites">
+    Native Metal (MPS) support for Apple Silicon and CUDA support for NVIDIA GPUs
+  </Card>
+  
+  <Card title="Privacy first" icon="shield-check">
+    100% local processing - your voice notes never leave your machine
+  </Card>
+  
+  <Card title="Intelligent monitoring" icon="folder-magnifying-glass">
+    Threaded Watchdog observer detects voice notes instantly without locking your system
+  </Card>
+  
+  <Card title="Smart maintenance" icon="broom">
+    Auto-cleanup of unused AI models and startup backfill for missed files
+  </Card>
+  
+  <Card title="Auto-clipboard" icon="clipboard">
+    Transcripts automatically copied to clipboard and saved to daily logs
+  </Card>
+  
+  <Card title="System health check" icon="heart-pulse">
+    Built-in diagnostics to analyze your hardware and suggest optimal model size
+  </Card>
+</CardGroup>
+
+## What you'll need
+
+Before installing WhatsApp Auto-Transcriber, make sure you have:
+
+- **Python 3.10 or higher** - Required for the application runtime
+- **FFmpeg** - Audio processing dependency for OpenAI Whisper
+- **WhatsApp Desktop** - Official Store version (not the web client)
+- **3-10 GB disk space** - Depends on which Whisper model you choose
+
+See the [Prerequisites](/prerequisites) page for detailed installation instructions.
+
+## How it works
+
+The transcription workflow is simple and automatic:
+
+<Steps>
+  <Step title="Start the transcriber">
+    Run `wa-transcriber` in your terminal. The tool loads the Whisper model and begins monitoring your WhatsApp Media folder.
+  </Step>
+  
+  <Step title="Receive a voice note">
+    When someone sends you a voice note in WhatsApp Desktop, the file is automatically downloaded to the monitored folder.
+  </Step>
+  
+  <Step title="Instant transcription">
+    The tool detects the new file, transcribes it using your selected Whisper model, and copies the text to your clipboard.
+  </Step>
+  
+  <Step title="Use the transcript">
+    Simply paste (Cmd+V or Ctrl+V) anywhere you need the text. The transcript is also saved to daily logs for future reference.
+  </Step>
+</Steps>
+
+## Example workflow
+
+Here's what you'll see when the transcriber is running:
+
+```bash
+wa-transcriber
+
+# Output:
+──────────────────────────────────────────────────
+🚀 Initializing System
+   Device: MPS
+   Model:  turbo
+   ⏳ Loading...
+✓ System Ready!
+
+🔍 Startup Scan: Checking for missed files (last 1h)...
+   ✓ All caught up.
+
+📂 Logs saved to: ~/.wa-transcriber/logs/transcribed_audio
+
+👀 Watching Folder:
+   /Users/you/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media
+──────────────────────────────────────────────────
+   Press Ctrl+C to stop the script.
+
+[14:23:15] ⚡️ [WORKING] Processing: PTT-20260302-WA0001.opus (0:08)
+✓ [DONE in 1.2s] Transcript:
+   Hey, I'm running a bit late but I'll be there in 10 minutes!
+   📋 Copied to clipboard
+```
+
+## Ready to get started?
+
+Follow our [Quickstart Guide](/quickstart) to install and configure WhatsApp Auto-Transcriber in under 5 minutes.

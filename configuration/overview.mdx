@@ -1,0 +1,188 @@
+---
+title: Configuration Overview
+description: Understanding the WhatsApp Auto-Transcriber configuration system
+---
+
+WhatsApp Auto-Transcriber uses a JSON-based configuration system that allows you to customize the transcription behavior, model selection, hardware acceleration, and maintenance settings.
+
+## Configuration File Location
+
+The configuration file is stored at:
+
+```
+~/.wa-transcriber/config.json
+```
+
+This location is consistent across all platforms (macOS, Windows, and Linux).
+
+## Initial Setup
+
+When you first install WhatsApp Auto-Transcriber, run the interactive setup wizard:
+
+```bash
+wa-transcriber setup
+```
+
+The setup wizard will:
+- Detect your hardware capabilities
+- Suggest an optimal Whisper model
+- Configure hardware acceleration settings
+- Locate your WhatsApp Media folder
+- Create the initial `config.json` file
+
+## Complete Configuration Structure
+
+Here's the complete `config.json` structure with default values:
+
+```json
+{
+    "MODEL_SIZE": "turbo",
+    "TRANSCRIPTION_LANGUAGE": null,
+    "SCAN_LOOKBACK_ENABLED": true,
+    "SCAN_LOOKBACK_HOURS": 1,
+    "MODEL_CLEANUP_ENABLED": true,
+    "MODEL_RETENTION_DAYS": 3,
+    "ENABLE_MPS_FP16": false,
+    "SYSTEM_MEMORY_LIMIT_FACTOR": 0.5,
+    "NVIDIA_VRAM_LIMIT_FACTOR": 0.7,
+    "FILE_READY_TIMEOUT": 10,
+    "MANUAL_PATH_OVERRIDE": null
+}
+```
+
+### Core Settings
+
+<ParamField path="MODEL_SIZE" type="string" default="turbo">
+  The Whisper model size to use for transcription. Options: `tiny`, `base`, `small`, `medium`, `turbo`, `large-v3`.
+  
+  See the [Model Selection Guide](/configuration/models) for detailed comparison.
+</ParamField>
+
+<ParamField path="TRANSCRIPTION_LANGUAGE" type="string | null" default="null">
+  The language code for transcription (e.g., `"en"`, `"es"`, `"fr"`). When set to `null`, Whisper will auto-detect the language.
+  
+  **Example:** `"en"` for English-only transcription
+</ParamField>
+
+<ParamField path="FILE_READY_TIMEOUT" type="integer" default="10">
+  Number of seconds to wait for a file to be fully written before processing. This prevents transcribing incomplete audio files.
+</ParamField>
+
+### Automation & Cleanup
+
+<ParamField path="SCAN_LOOKBACK_ENABLED" type="boolean" default="true">
+  When enabled, scans for missed voice notes on startup.
+</ParamField>
+
+<ParamField path="SCAN_LOOKBACK_HOURS" type="integer" default="1">
+  Number of hours to look back when scanning for missed files. Only applies when `SCAN_LOOKBACK_ENABLED` is `true`.
+</ParamField>
+
+<ParamField path="MODEL_CLEANUP_ENABLED" type="boolean" default="true">
+  Automatically delete unused Whisper model files to save disk space.
+</ParamField>
+
+<ParamField path="MODEL_RETENTION_DAYS" type="integer" default="3">
+  Number of days to retain unused models before deletion. Only applies when `MODEL_CLEANUP_ENABLED` is `true`.
+</ParamField>
+
+### Hardware Acceleration
+
+<ParamField path="ENABLE_MPS_FP16" type="boolean" default="false">
+  Enable half-precision (FP16) on Apple Silicon MPS devices. Can improve speed but may reduce accuracy.
+  
+  See [Hardware Acceleration Settings](/configuration/hardware) for details.
+</ParamField>
+
+<ParamField path="SYSTEM_MEMORY_LIMIT_FACTOR" type="float" default="0.5">
+  Percentage of system RAM to allocate for transcription (0.0-1.0). Default is 50%.
+</ParamField>
+
+<ParamField path="NVIDIA_VRAM_LIMIT_FACTOR" type="float" default="0.7">
+  Percentage of NVIDIA VRAM to allocate for transcription (0.0-1.0). Default is 70%.
+</ParamField>
+
+### Paths
+
+<ParamField path="MANUAL_PATH_OVERRIDE" type="string | null" default="null">
+  Manual path to WhatsApp Media folder. When set to `null`, the application auto-detects the path.
+  
+  **Example (macOS):** `"/Users/username/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/Message/Media"`
+  
+  **Example (Windows):** `"C:\\Users\\username\\AppData\\Local\\Packages\\5319275A.WhatsAppDesktop_cv1g1gvanyjgm\\LocalState\\shared\\transfers"`
+</ParamField>
+
+## Viewing Current Configuration
+
+To view your current configuration with formatted output:
+
+```bash
+wa-transcriber config
+```
+
+This displays all settings organized into groups:
+- Core Settings (model, language, timeout)
+- Automation & Cleanup (lookback, model retention)
+- Hardware Limits (RAM, VRAM, MPS)
+- Paths (WhatsApp Media location)
+
+## Modifying Configuration
+
+### Using the Setup Wizard (Recommended)
+
+The easiest way to modify settings:
+
+```bash
+wa-transcriber setup
+```
+
+This provides an interactive menu to change any setting.
+
+### Manual Editing
+
+You can also edit `~/.wa-transcriber/config.json` directly:
+
+1. Open the file in your preferred text editor
+2. Modify the desired values
+3. Save the file
+4. Restart the transcriber for changes to take effect
+
+<Warning>
+  Ensure the JSON syntax is valid when manually editing. Invalid JSON will cause the application to fail on startup.
+</Warning>
+
+## Configuration Validation
+
+The application validates configuration on startup:
+
+- Missing keys automatically fall back to default values
+- Invalid values may cause errors or unexpected behavior
+- Run `wa-transcriber health` to verify your configuration is compatible with your hardware
+
+## Resetting Configuration
+
+To reset all settings to defaults:
+
+```bash
+wa-transcriber reset
+```
+
+<Warning>
+  This will delete all configuration and user data, including transcription history.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Model Selection" icon="brain" href="/configuration/models">
+    Learn how to choose the right Whisper model for your hardware
+  </Card>
+  
+  <Card title="Hardware Acceleration" icon="microchip" href="/configuration/hardware">
+    Configure GPU/NPU acceleration for faster transcription
+  </Card>
+  
+  <Card title="Advanced Options" icon="sliders" href="/configuration/advanced">
+    Fine-tune lookback scanning, cleanup, and language settings
+  </Card>
+</CardGroup>

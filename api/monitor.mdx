@@ -1,0 +1,298 @@
+---
+title: "monitor.py"
+description: "File system monitoring for detecting new WhatsApp voice messages"
+icon: "radar"
+---
+
+The `monitor.py` module implements real-time file system monitoring using the Watchdog library to detect new audio files created by WhatsApp.
+
+## Overview
+
+This module provides a custom event handler that watches a directory for new audio files and queues them for transcription. It's designed to work with WhatsApp's internal media storage directories and supports automatic debouncing to prevent duplicate processing.
+
+**Key Features:**
+- Real-time file system event monitoring
+- Audio file format detection (.opus, .m4a, .mp3, .wav)
+- Automatic debouncing to prevent duplicate events
+- Thread-safe queue integration
+- Integration with Python's Watchdog library
+
+## Classes
+
+### InternalAudioHandler
+
+```python
+class InternalAudioHandler(FileSystemEventHandler)
+```
+
+Custom file system event handler that inherits from `watchdog.events.FileSystemEventHandler`.
+
+This class monitors a directory for new audio files and adds them to a processing queue when detected.
+
+#### Attributes
+
+<ResponseField name="queue" type="queue.Queue">
+  Thread-safe queue where detected audio file paths are placed for processing
+</ResponseField>
+
+<ResponseField name="last_transcribed" type="Optional[str]">
+  Stores the filename of the last transcribed file to prevent duplicate processing. Used for debouncing duplicate file system events.
+</ResponseField>
+
+#### Constructor
+
+```python
+def __init__(self, audio_queue: queue.Queue) -> None
+```
+
+Initializes the audio handler with a queue for detected files.
+
+<ParamField path="audio_queue" type="queue.Queue" required>
+  A thread-safe queue instance where detected audio file paths will be placed
+</ParamField>
+
+**Example:**
+
+```python
+import queue
+from app.monitor import InternalAudioHandler
+
+# Create a queue for audio files
+audio_queue = queue.Queue()
+
+# Initialize the handler
+handler = InternalAudioHandler(audio_queue)
+
+print(f"Handler initialized with queue: {handler.queue}")
+print(f"Last transcribed: {handler.last_transcribed}")  # None initially
+```
+
+---
+
+#### on_created
+
+```python
+def on_created(self, event: FileSystemEvent) -> None
+```
+
+Triggered automatically when a file is created in the watched directory.
+
+This method is called by the Watchdog observer whenever a new file creation event is detected. It filters for audio files and adds them to the processing queue.
+
+<ParamField path="event" type="FileSystemEvent" required>
+  The file system event object containing information about the created file
+</ParamField>
+
+**Example:**
+
+```python
+from watchdog.events import FileSystemEvent
+from app.monitor import InternalAudioHandler
+import queue
+
+# This method is called automatically by Watchdog Observer
+# Manual invocation example for testing:
+
+audio_queue = queue.Queue()
+handler = InternalAudioHandler(audio_queue)
+
+# Simulate a file creation event
+class MockEvent:
+    def __init__(self, path, is_dir=False):
+        self.src_path = path
+        self.is_directory = is_dir
+
+event = MockEvent("/path/to/audio/PTT-20260302-WA0001.opus")
+handler.on_created(event)
+
+# Check if file was queued
+if not audio_queue.empty():
+    file_path = audio_queue.get()
+    print(f"Queued: {file_path}")
+```
+
+**Behavior:**
+
+1. **Directory Check**: Ignores directory creation events (only processes files)
+2. **Audio Format Detection**: Checks if the file has a supported audio extension:
+   - `.opus` (WhatsApp voice messages)
+   - `.m4a` (iPhone audio recordings)
+   - `.mp3` (general audio)
+   - `.wav` (uncompressed audio)
+3. **Debouncing**: Compares against `last_transcribed` to prevent duplicate processing of the same file
+4. **Console Output**: Prints a magenta-colored notification when a new file is detected
+5. **Queue Insertion**: Adds the full file path to the queue for the transcription worker
+
+**Console Output:**
+
+```
+📥 [NEW] Detected: PTT-20260302-WA0001.opus
+```
+
+---
+
+## Integration with Watchdog
+
+The `InternalAudioHandler` class is designed to work with the Watchdog library's `Observer` pattern.
+
+### Complete Usage Example
+
+```python
+import queue
+import time
+from watchdog.observers import Observer
+from app.monitor import InternalAudioHandler
+
+# Create the queue
+audio_queue = queue.Queue()
+
+# Create the event handler
+event_handler = InternalAudioHandler(audio_queue)
+
+# Create and configure the observer
+observer = Observer()
+observer.schedule(
+    event_handler,
+    path="/path/to/whatsapp/media",
+    recursive=False  # Don't watch subdirectories
+)
+
+# Start monitoring
+observer.start()
+print("Started monitoring for new audio files...")
+
+try:
+    while True:
+        # Check for new files in the queue
+        if not audio_queue.empty():
+            audio_file = audio_queue.get()
+            print(f"Processing: {audio_file}")
+            # Transcribe the audio file here
+        
+        time.sleep(0.1)
+except KeyboardInterrupt:
+    observer.stop()
+    print("\nStopped monitoring.")
+
+observer.join()
+```
+
+### Production Usage Pattern
+
+In the main application, this handler is used with a separate worker thread:
+
+```python
+import queue
+import threading
+from watchdog.observers import Observer
+from app.monitor import InternalAudioHandler
+
+def transcription_worker(audio_queue):
+    """Worker thread that processes files from the queue."""
+    while True:
+        audio_file = audio_queue.get()
+        if audio_file is None:  # Poison pill to stop worker
+            break
+        
+        try:
+            # Transcribe the audio file
+            transcribe(audio_file)
+        except Exception as e:
+            print(f"Error processing {audio_file}: {e}")
+        finally:
+            audio_queue.task_done()
+
+# Setup
+audio_queue = queue.Queue()
+worker_thread = threading.Thread(
+    target=transcription_worker,
+    args=(audio_queue,),
+    daemon=True
+)
+worker_thread.start()
+
+# Start file monitoring
+event_handler = InternalAudioHandler(audio_queue)
+observer = Observer()
+observer.schedule(event_handler, path=whatsapp_media_path, recursive=False)
+observer.start()
+
+print("System is now monitoring for audio files...")
+```
+
+---
+
+## Supported Audio Formats
+
+The handler detects files with the following extensions:
+
+| Extension | Description | Common Source |
+|-----------|-------------|---------------|
+| `.opus` | Opus audio codec | WhatsApp voice messages |
+| `.m4a` | MPEG-4 audio | iPhone recordings, WhatsApp |
+| `.mp3` | MP3 audio | General audio files |
+| `.wav` | Waveform audio | Uncompressed audio |
+
+---
+
+## Debouncing Logic
+
+The `last_transcribed` attribute prevents duplicate processing:
+
+```python
+if self.last_transcribed == filename:
+    return  # Skip duplicate event
+self.last_transcribed = filename
+```
+
+**Why is this needed?**
+
+Some file systems (especially on macOS and Windows) may emit multiple `on_created` events for the same file due to:
+- File system caching
+- Metadata updates
+- Application-level file operations
+
+The debouncing mechanism ensures each file is only queued once.
+
+---
+
+## Thread Safety
+
+The `InternalAudioHandler` class is thread-safe because:
+
+1. **Queue Operations**: Uses Python's `queue.Queue`, which is thread-safe by design
+2. **Read-Only Event Data**: The `event.src_path` is read-only and not modified
+3. **Simple State**: Only tracks a single string (`last_transcribed`), which is updated atomically
+
+---
+
+## Error Handling
+
+The handler does not raise exceptions. It silently:
+- Ignores directory creation events
+- Ignores non-audio files
+- Skips duplicate events
+
+This makes the handler robust and prevents crashes from unexpected file system events.
+
+---
+
+## Dependencies
+
+```python
+import os
+import queue
+from typing import Optional
+from colorama import Fore, Style
+from watchdog.events import FileSystemEventHandler, FileSystemEvent
+```
+
+**External Libraries:**
+- `watchdog`: File system monitoring library
+- `colorama`: Cross-platform colored terminal output
+
+---
+
+## Source Location
+
+`~/workspace/source/app/monitor.py`

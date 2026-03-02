@@ -1,0 +1,244 @@
+---
+title: wa-transcriber logs
+description: View application and transcription logs
+icon: file-lines
+---
+
+The `logs` command displays the last 50 lines of either application logs or transcription logs.
+
+## Usage
+
+```bash
+wa-transcriber logs <LOG_TYPE>
+```
+
+## Arguments
+
+<ParamField path="LOG_TYPE" type="enum" required>
+  Which logs to view:
+  - `app` - Application logs (errors, warnings, system events)
+  - `audio` - Transcription logs (transcribed voice notes with timestamps)
+</ParamField>
+
+## Examples
+
+### View Application Logs
+
+```bash
+wa-transcriber logs app
+```
+
+**Output**:
+
+```bash
+● wa-transcriber v1.1.0
+  Recent Logs
+  © 2026 Jean Paul Fernandez (@jpxoi)
+──────────────────────────────────────────────────
+Reading latest log file: 2026-03-02_daily.log
+
+│ 2026-03-02 14:15:23 - INFO - Initializing system
+│ 2026-03-02 14:15:24 - INFO - Device: cuda
+│ 2026-03-02 14:15:24 - INFO - Model: turbo
+│ 2026-03-02 14:15:26 - INFO - Model loaded successfully
+│ 2026-03-02 14:15:26 - INFO - Starting file watcher
+│ 2026-03-02 14:23:45 - INFO - New file detected: PTT-20260302-WA0001.opus
+│ 2026-03-02 14:23:48 - INFO - Transcription completed in 2.3s
+│ 2026-03-02 14:23:48 - INFO - Copied to clipboard
+
+──────────────────────────────────────────────────
+➜ Full logs location: ~/.wa-transcriber/logs/transcribed_audio
+```
+
+### View Transcription Logs
+
+```bash
+wa-transcriber logs audio
+```
+
+**Output**:
+
+```bash
+● wa-transcriber v1.1.0
+  Recent Logs
+  © 2026 Jean Paul Fernandez (@jpxoi)
+──────────────────────────────────────────────────
+Reading latest log file: 2026-03-02_daily.log
+
+│ [2026-03-02 09:15:32] Hey, can you pick up milk on your way home?
+│ [2026-03-02 09:47:18] Running about 10 minutes late to the meeting
+│ [2026-03-02 10:23:41] Don't forget we have dinner reservations at 7
+│ [2026-03-02 11:05:19] The project deadline has been moved to next Friday
+│ [2026-03-02 14:23:48] Just finished the presentation, heading back now
+
+──────────────────────────────────────────────────
+➜ Full logs location: ~/.wa-transcriber/logs/transcribed_audio
+```
+
+## Log File Locations
+
+Logs are stored in daily rotating files:
+
+### Application Logs
+
+**Directory**: `~/.wa-transcriber/logs/app/`
+
+**Format**: `YYYY-MM-DD_daily.log`
+
+**Contents**:
+- System initialization messages
+- Hardware detection results
+- Model loading events
+- File watcher activity
+- Errors and warnings
+
+### Transcription Logs
+
+**Directory**: `~/.wa-transcriber/logs/transcribed_audio/`
+
+**Format**: `YYYY-MM-DD_daily.log`
+
+**Contents**:
+- Timestamp of transcription
+- Full transcribed text
+- One line per voice note
+
+<Note>
+  Logs are rotated daily. Each day creates a new file, and the `logs` command automatically displays the most recent file.
+</Note>
+
+## Viewing More Lines
+
+The `logs` command displays the last 50 lines by default. To view more, use `tail` directly:
+
+```bash
+# View last 100 lines of transcription logs
+tail -n 100 ~/.wa-transcriber/logs/transcribed_audio/*_daily.log
+
+# View last 200 lines of app logs
+tail -n 200 ~/.wa-transcriber/logs/app/*_daily.log
+```
+
+## Viewing All Logs
+
+```bash
+# View all transcription logs
+cat ~/.wa-transcriber/logs/transcribed_audio/*_daily.log
+
+# View all app logs
+cat ~/.wa-transcriber/logs/app/*_daily.log
+```
+
+## Searching Logs
+
+Use `grep` to search for specific content:
+
+```bash
+# Find all transcriptions containing "meeting"
+grep -i "meeting" ~/.wa-transcriber/logs/transcribed_audio/*_daily.log
+
+# Find all errors in app logs
+grep "ERROR" ~/.wa-transcriber/logs/app/*_daily.log
+```
+
+## Log File Management
+
+### Clearing Old Logs
+
+Logs are not automatically deleted. To clear old logs:
+
+```bash
+# Remove all transcription logs older than 7 days
+find ~/.wa-transcriber/logs/transcribed_audio/ -name "*_daily.log" -mtime +7 -delete
+
+# Remove all app logs older than 30 days
+find ~/.wa-transcriber/logs/app/ -name "*_daily.log" -mtime +30 -delete
+```
+
+### Checking Log Size
+
+```bash
+# Check total size of all logs
+du -sh ~/.wa-transcriber/logs/
+
+# Check size by category
+du -sh ~/.wa-transcriber/logs/app/
+du -sh ~/.wa-transcriber/logs/transcribed_audio/
+```
+
+## Empty Logs
+
+If no logs exist:
+
+```bash
+$ wa-transcriber logs audio
+● wa-transcriber v1.1.0
+  Recent Logs
+──────────────────────────────────────────────────
+⚠ No log files found in:
+  ~/.wa-transcriber/logs/transcribed_audio
+```
+
+This typically means the transcriber hasn't been run yet or hasn't processed any files.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No logs appearing" icon="magnifying-glass">
+    **Symptoms**: The log command shows no files
+    
+    **Causes**:
+    - The transcriber has never been run
+    - Logs were deleted manually
+    - Permission issues preventing log creation
+    
+    **Solution**: Run `wa-transcriber` to generate new logs
+  </Accordion>
+  
+  <Accordion title="Transcription logs empty" icon="file">
+    **Symptoms**: App logs exist but transcription logs are empty
+    
+    **Causes**:
+    - No voice notes have been processed yet
+    - Startup scan found no new files
+    - Files are being filtered out (already in history)
+    
+    **Solution**: Send a test voice note in WhatsApp and wait for transcription
+  </Accordion>
+  
+  <Accordion title="Log file read errors" icon="triangle-exclamation">
+    **Symptoms**: Error reading log file appears
+    
+    **Causes**:
+    - File permissions issue
+    - Corrupted log file
+    - Disk full
+    
+    **Solution**: Check file permissions or delete corrupted log files
+  </Accordion>
+</AccordionGroup>
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Review Transcriptions" icon="message">
+    Check previously transcribed voice notes without opening WhatsApp.
+  </Card>
+  
+  <Card title="Debugging" icon="bug">
+    Investigate errors or unexpected behavior in the application.
+  </Card>
+  
+  <Card title="Audit Trail" icon="clock-rotate-left">
+    See when voice notes were processed and their content.
+  </Card>
+  
+  <Card title="Performance Monitoring" icon="gauge">
+    Check transcription times and system performance.
+  </Card>
+</CardGroup>
+
+## Related Commands
+
+- [`wa-transcriber`](/cli/transcriber) - Run the transcriber to generate logs
+- [`wa-transcriber reset`](/cli/reset) - Delete all logs and data

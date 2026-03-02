@@ -1,0 +1,80 @@
+---
+title: CLI Overview
+description: Complete command-line reference for WhatsApp Auto-Transcriber
+icon: terminal
+---
+
+The WhatsApp Auto-Transcriber provides a simple CLI for managing and running the transcription service.
+
+## Command Structure
+
+All commands follow this pattern:
+
+```bash
+wa-transcriber [COMMAND] [OPTIONS]
+```
+
+## Available Commands
+
+<CardGroup cols={2}>
+  <Card title="wa-transcriber" icon="play" href="/cli/transcriber">
+    Run the transcriber (default command)
+  </Card>
+  
+  <Card title="health" icon="heart-pulse" href="/cli/health">
+    Run system diagnostics
+  </Card>
+  
+  <Card title="config" icon="gear" href="/cli/config">
+    Show current configuration
+  </Card>
+  
+  <Card title="setup" icon="wand-magic-sparkles" href="/cli/setup">
+    Interactive setup wizard
+  </Card>
+  
+  <Card title="reset" icon="rotate-left" href="/cli/reset">
+    Reset application data
+  </Card>
+  
+  <Card title="logs" icon="file-lines" href="/cli/logs">
+    View application logs
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+<Steps>
+  <Step title="First Time Setup">
+    Run the interactive setup wizard to configure the application:
+    ```bash
+    wa-transcriber setup
+    ```
+  </Step>
+  
+  <Step title="Verify Installation">
+    Check that all dependencies are installed:
+    ```bash
+    wa-transcriber health
+    ```
+  </Step>
+  
+  <Step title="Start Transcribing">
+    Run the transcriber:
+    ```bash
+    wa-transcriber
+    ```
+  </Step>
+</Steps>
+
+## Getting Help
+
+Display help information for any command:
+
+```bash
+wa-transcriber --help
+```
+
+<Note>
+  The transcriber runs in the foreground and monitors your WhatsApp media folder continuously. Press `Ctrl+C` to stop.
+</Note>

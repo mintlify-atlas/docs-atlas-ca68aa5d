@@ -1,0 +1,608 @@
+---
+title: Performance Optimization
+description: Advanced performance tuning and optimization strategies for WhatsApp Auto-Transcriber
+---
+
+# Performance Optimization
+
+This guide covers advanced optimization strategies to maximize transcription speed, minimize resource usage, and maintain system stability.
+
+## Understanding Model Selection
+
+### Model Requirements
+
+Each Whisper model has different memory requirements and performance characteristics:
+
+| Model | Memory Required | Speed | Accuracy | Best Use Case |
+|-------|-----------------|-------|----------|---------------|
+| `tiny` | ~1 GB | Instant | Low | Old hardware, testing |
+| `base` | ~1 GB | Very Fast | Decent | Quick snippets |
+| `small` | ~2 GB | Fast | Good | General use |
+| `medium` | ~5 GB | Balanced | Great | Professional use |
+| `turbo` | ~6 GB | Optimized | Excellent | **Recommended for most users** |
+| `large-v3` | ~10 GB | Slow | Perfect | Heavy accents, noisy audio |
+
+### Automatic Model Suggestion
+
+The health check analyzes your hardware and suggests the optimal model:
+
+```bash
+wa-transcriber health
+```
+
+**How it works (from health.py:56-98):**
+
+<Steps>
+  <Step title="Detect Memory Type">
+    - **NVIDIA GPU:** Uses VRAM with `NVIDIA_VRAM_LIMIT_FACTOR` (default 70%)
+    - **Apple Silicon:** Uses unified memory with `SYSTEM_MEMORY_LIMIT_FACTOR` (default 50%)
+    - **CPU Only:** Uses system RAM with `SYSTEM_MEMORY_LIMIT_FACTOR`
+  </Step>
+
+  <Step title="Calculate Usable Memory">
+    For NVIDIA GPUs:
+    ```python
+    min_free_vram = 2.0  # Reserve 2GB for OS/display
+    usable_gb = min(
+        total_gb * 0.7,  # 70% limit
+        max(0, total_gb - min_free_vram)
+    )
+    ```
+
+    For System RAM:
+    ```python
+    usable_gb = total_gb * 0.5  # 50% limit
+    ```
+  </Step>
+
+  <Step title="Select Model">
+    The largest model where `model_size / usable_gb <= 0.7` is selected.
+
+    This ensures the model uses at most 70% of the safe allowance, leaving headroom for processing.
+  </Step>
+</Steps>
+
+### Manual Model Selection
+
+Override the automatic suggestion in `~/.wa-transcriber/config.json`:
+
+```json
+{
+  "MODEL_SIZE": "turbo"
+}
+```
+
+<Warning>
+  Choosing a model larger than recommended can cause:
+  - Out-of-memory crashes
+  - System freezes
+  - Swap/disk thrashing
+</Warning>
+
+## Memory Management Strategies
+
+### NVIDIA GPU Systems
+
+**Default Configuration:**
+```json
+{
+  "NVIDIA_VRAM_LIMIT_FACTOR": 0.7
+}
+```
+
+**Tuning Guidelines:**
+
+<Tabs>
+  <Tab title="Gaming PC (Shared GPU)">
+    If you run games or GPU-intensive apps alongside the transcriber:
+
+    ```json
+    {
+      "NVIDIA_VRAM_LIMIT_FACTOR": 0.5
+    }
+    ```
+
+    This leaves more VRAM for other applications.
+  </Tab>
+
+  <Tab title="Dedicated Workstation">
+    If the transcriber is the primary GPU workload:
+
+    ```json
+    {
+      "NVIDIA_VRAM_LIMIT_FACTOR": 0.8
+    }
+    ```
+
+    Allows larger models but less headroom for OS.
+  </Tab>
+
+  <Tab title="Multi-GPU Setup">
+    PyTorch uses the first available GPU. To specify a different GPU:
+
+    ```bash
+    export CUDA_VISIBLE_DEVICES=1  # Use GPU 1
+    wa-transcriber
+    ```
+  </Tab>
+</Tabs>
+
+### Apple Silicon Systems
+
+**Default Configuration:**
+```json
+{
+  "SYSTEM_MEMORY_LIMIT_FACTOR": 0.5,
+  "ENABLE_MPS_FP16": false
+}
+```
+
+**Optimization Options:**
+
+<AccordionGroup>
+  <Accordion title="Enable FP16 for Faster Processing">
+    Half-precision (FP16) mode reduces memory usage and increases speed with minimal accuracy loss:
+
+    ```json
+    {
+      "ENABLE_MPS_FP16": true
+    }
+    ```
+
+    **Benefits:**
+    - ~2x faster inference
+    - ~50% less memory usage
+    - Allows running larger models
+
+    **Trade-offs:**
+    - Slight accuracy reduction (usually negligible)
+    - May cause numerical instability in rare cases
+  </Accordion>
+
+  <Accordion title="Increase Memory Limit for Larger Models">
+    If you have 32GB+ RAM and rarely use other apps:
+
+    ```json
+    {
+      "SYSTEM_MEMORY_LIMIT_FACTOR": 0.6
+    }
+    ```
+
+    <Warning>
+      Don't exceed 0.7 to avoid system instability.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Optimize for Battery Life">
+    Use a smaller model to reduce CPU/GPU load:
+
+    ```json
+    {
+      "MODEL_SIZE": "small",
+      "SYSTEM_MEMORY_LIMIT_FACTOR": 0.4
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### CPU-Only Systems
+
+**Optimization Tips:**
+
+1. **Use the smallest acceptable model:**
+   ```json
+   {
+     "MODEL_SIZE": "base"
+   }
+   ```
+
+2. **Increase RAM allocation if available:**
+   ```json
+   {
+     "SYSTEM_MEMORY_LIMIT_FACTOR": 0.6
+   }
+   ```
+
+3. **Reduce concurrent processing load:**
+   Close other apps before processing voice notes.
+
+4. **Consider upgrading hardware:**
+   CPU transcription is 10-20x slower than GPU.
+
+## Cleanup and Maintenance
+
+### Automatic Model Cleanup
+
+Whisper models are downloaded to `~/.cache/whisper/` and can consume significant disk space:
+
+| Model | Disk Space |
+|-------|------------|
+| tiny | ~75 MB |
+| base | ~142 MB |
+| small | ~466 MB |
+| medium | ~1.5 GB |
+| turbo | ~1.6 GB |
+| large-v3 | ~2.9 GB |
+
+**Enable automatic cleanup:**
+
+```json
+{
+  "MODEL_CLEANUP_ENABLED": true,
+  "MODEL_RETENTION_DAYS": 3
+}
+```
+
+**How it works (from maintenance.py):**
+
+<Steps>
+  <Step title="On Startup">
+    The transcriber checks `~/.cache/whisper/` for unused models.
+  </Step>
+
+  <Step title="Identify Unused Models">
+    Models not accessed in the last `MODEL_RETENTION_DAYS` days are marked for deletion.
+  </Step>
+
+  <Step title="Preserve Current Model">
+    The model specified in `MODEL_SIZE` is never deleted, even if unused.
+  </Step>
+
+  <Step title="Delete Old Models">
+    Old models are removed to free disk space.
+  </Step>
+</Steps>
+
+**Manual cleanup:**
+
+<Tabs>
+  <Tab title="macOS/Linux">
+    ```bash
+    rm -rf ~/.cache/whisper/*
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell
+    Remove-Item -Recurse -Force $env:USERPROFILE\.cache\whisper\*
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  Models will be re-downloaded automatically when needed.
+</Note>
+
+### Database Maintenance
+
+The app maintains a history database at `~/.wa-transcriber/history.db` to track processed files.
+
+**View database size:**
+
+<Tabs>
+  <Tab title="macOS/Linux">
+    ```bash
+    du -h ~/.wa-transcriber/history.db
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell
+    (Get-Item $env:USERPROFILE\.wa-transcriber\history.db).length / 1MB
+    ```
+  </Tab>
+</Tabs>
+
+**Reset database:**
+
+```bash
+wa-transcriber reset
+```
+
+<Warning>
+  This deletes all history and configuration. Backup config.json first if you want to preserve settings.
+</Warning>
+
+## Using Health Check for Optimization
+
+### Interpreting Health Check Output
+
+The health check provides actionable optimization advice:
+
+**Example 1: Under-utilized Hardware**
+
+```
+  Result:
+  We suggest:          'turbo'
+  Your Config:         'small'
+
+  OPTIMIZATION: Your hardware is under-utilized.
+     You use 'small', but can handle 'turbo'.
+     ➜ Switch to 'turbo' in config.json for better accuracy.
+```
+
+**Action:** Increase model size for better accuracy without performance penalty.
+
+**Example 2: Over-allocated Model**
+
+```
+  Result:
+  We suggest:          'medium'
+  Your Config:         'large-v3'
+
+  CRITICAL: 'large-v3' is too large for your system.
+     It requires ~10GB, but you only have 6.4GB safe.
+     ➜ Switch to 'medium' in config.json
+```
+
+**Action:** Reduce model size immediately to prevent crashes.
+
+**Example 3: Large vs Turbo**
+
+```
+  ADVICE: You are using 'large'.
+     'turbo' is significantly faster and uses less RAM.
+```
+
+**Action:** Switch to `turbo` for better speed with comparable accuracy.
+
+### Performance Monitoring
+
+Run health check periodically to verify optimization:
+
+```bash
+wa-transcriber health
+```
+
+**When to run:**
+- After hardware changes (RAM upgrade, new GPU)
+- After macOS/Windows updates
+- If experiencing performance issues
+- After changing configuration
+
+## Performance Tuning Tips
+
+### 1. Startup Scan Optimization
+
+The startup scan checks for missed voice notes:
+
+```json
+{
+  "SCAN_LOOKBACK_ENABLED": true,
+  "SCAN_LOOKBACK_HOURS": 1
+}
+```
+
+**Tuning Guidelines:**
+
+<Tabs>
+  <Tab title="Always-On Usage">
+    If you keep the transcriber running 24/7:
+
+    ```json
+    {
+      "SCAN_LOOKBACK_ENABLED": false
+    }
+    ```
+
+    Saves startup time.
+  </Tab>
+
+  <Tab title="Frequent Restarts">
+    If you restart the app multiple times per day:
+
+    ```json
+    {
+      "SCAN_LOOKBACK_HOURS": 6
+    }
+    ```
+
+    Ensures no messages are missed.
+  </Tab>
+
+  <Tab title="Intermittent Usage">
+    If you run the app a few times per week:
+
+    ```json
+    {
+      "SCAN_LOOKBACK_HOURS": 24
+    }
+    ```
+
+    Catches messages from the last day.
+  </Tab>
+</Tabs>
+
+### 2. File Ready Timeout
+
+Some systems need more time for files to be fully written:
+
+```json
+{
+  "FILE_READY_TIMEOUT": 10
+}
+```
+
+**Symptoms of timeout too short:**
+- "File not ready" errors
+- Partial transcriptions
+- Processing failures
+
+**Solution:** Increase timeout:
+
+```json
+{
+  "FILE_READY_TIMEOUT": 15
+}
+```
+
+### 3. Language-Specific Optimization
+
+Auto-detection adds overhead. If you only receive messages in one language:
+
+```json
+{
+  "TRANSCRIPTION_LANGUAGE": "en"
+}
+```
+
+**Supported languages:** `en`, `es`, `fr`, `de`, `it`, `pt`, `nl`, `pl`, `ru`, `ja`, `ko`, `zh`, etc.
+
+**Benefits:**
+- Faster transcription (skips language detection)
+- Better accuracy for the specified language
+- Reduces processing overhead
+
+## Advanced Optimization
+
+### Multi-Language Environments
+
+If you receive messages in multiple languages, use auto-detection:
+
+```json
+{
+  "TRANSCRIPTION_LANGUAGE": null
+}
+```
+
+Whisper will automatically detect the language for each voice note.
+
+### Custom Model Paths
+
+By default, models are cached in `~/.cache/whisper/`. To use a custom cache location:
+
+```bash
+export WHISPER_MODEL_DIR=/path/to/custom/cache
+wa-transcriber
+```
+
+<Note>
+  Useful for network drives or custom storage configurations.
+</Note>
+
+### Monitoring Resource Usage
+
+<Tabs>
+  <Tab title="macOS">
+    Monitor memory and CPU usage:
+
+    ```bash
+    # CPU and memory
+    top -pid $(pgrep -f wa-transcriber)
+
+    # Detailed GPU usage (M1/M2/M3)
+    sudo powermetrics --samplers gpu_power -i 1000
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    Monitor GPU and memory usage:
+
+    ```powershell
+    # GPU usage
+    nvidia-smi -l 1
+
+    # CPU and memory
+    Get-Process -Name python | Format-Table CPU, PM
+    ```
+  </Tab>
+
+  <Tab title="Linux">
+    ```bash
+    # CPU and memory
+    htop -p $(pgrep -f wa-transcriber)
+
+    # GPU usage
+    nvidia-smi -l 1
+    ```
+  </Tab>
+</Tabs>
+
+## Troubleshooting Performance Issues
+
+### Slow Transcription
+
+<AccordionGroup>
+  <Accordion title="Check Hardware Acceleration">
+    ```bash
+    wa-transcriber health
+    ```
+
+    Look for the "Accelerator" line:
+    - **Active (NVIDIA ...):** GPU acceleration enabled
+    - **Active (MPS):** Apple Silicon acceleration enabled
+    - **None:** CPU-only (slow)
+
+    If CPU-only, verify drivers and PyTorch installation.
+  </Accordion>
+
+  <Accordion title="Verify Model Size">
+    Larger models are slower. Check your config:
+
+    ```bash
+    wa-transcriber config
+    ```
+
+    Consider switching to `turbo` for the best speed/accuracy balance.
+  </Accordion>
+
+  <Accordion title="Close Other GPU Apps">
+    Other apps using the GPU can slow transcription:
+
+    - Games
+    - Video editors
+    - Browsers with hardware acceleration
+    - Mining software
+
+    Close these before processing important messages.
+  </Accordion>
+</AccordionGroup>
+
+### High Memory Usage
+
+<AccordionGroup>
+  <Accordion title="Reduce Model Size">
+    ```json
+    {
+      "MODEL_SIZE": "medium"
+    }
+    ```
+
+    See model requirements table above.
+  </Accordion>
+
+  <Accordion title="Lower Memory Limit Factor">
+    ```json
+    {
+      "SYSTEM_MEMORY_LIMIT_FACTOR": 0.4,
+      "NVIDIA_VRAM_LIMIT_FACTOR": 0.5
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Enable Model Cleanup">
+    ```json
+    {
+      "MODEL_CLEANUP_ENABLED": true,
+      "MODEL_RETENTION_DAYS": 1
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="macOS Guide" icon="apple" href="/guides/macos">
+    Platform-specific optimization for macOS
+  </Card>
+  <Card title="Windows Guide" icon="windows" href="/guides/windows">
+    Platform-specific optimization for Windows
+  </Card>
+  <Card title="Workflows" icon="sitemap" href="/guides/workflows">
+    Learn efficient daily usage patterns
+  </Card>
+  <Card title="Configuration Reference" icon="gear" href="/configuration/overview">
+    Complete configuration option reference
+  </Card>
+</CardGroup>
